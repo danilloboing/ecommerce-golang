@@ -13,9 +13,10 @@ go.work.sum
 .env.local
 .env.*.local
 
-# editor
+# editor / agent state
 .idea/
 .vscode/
+.claude/
 *.swp
 .DS_Store
 
