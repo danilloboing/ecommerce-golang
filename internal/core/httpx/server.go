@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,7 @@ type ServerOptions struct {
 type Server struct {
 	http     *http.Server
 	listener net.Listener
+	mu       sync.RWMutex
 	addr     string
 	shutdown time.Duration
 }
@@ -59,8 +61,11 @@ func (s *Server) Start() error {
 	if err != nil {
 		return err
 	}
+
+	s.mu.Lock()
 	s.listener = ln
 	s.addr = ln.Addr().String()
+	s.mu.Unlock()
 
 	if err := s.http.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
@@ -69,7 +74,11 @@ func (s *Server) Start() error {
 }
 
 // Addr returns the actual bound address (resolves :0 ports).
-func (s *Server) Addr() string { return s.addr }
+func (s *Server) Addr() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.addr
+}
 
 // Shutdown gracefully drains in-flight requests within the configured timeout.
 func (s *Server) Shutdown(parent context.Context) error {

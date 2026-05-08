@@ -1,0 +1,63 @@
+openapi: 3.1.0
+info:
+  title: Marketplace Golang API
+  description: |
+    REST API for the marketplace-golang single-vendor e-commerce backend.
+    Phase 1a exposes only liveness, readiness, and metrics; domain endpoints
+    are added in subsequent phases.
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+    description: Local development
+paths:
+  /health:
+    get:
+      summary: Liveness probe
+      description: Returns 200 if the process is running.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Process alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                required: [status]
+  /ready:
+    get:
+      summary: Readiness probe
+      description: Returns 200 if all backing services are reachable.
+      operationId: getReady
+      responses:
+        "200":
+          description: All checks healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        "503":
+          description: One or more checks failed
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: Prometheus exposition format.
+      operationId: getMetrics
+      responses:
+        "200":
+          description: Metrics text
+          content:
+            text/plain:
+              schema:
+                type: string
