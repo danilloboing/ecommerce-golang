@@ -6,10 +6,32 @@ package queries
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 type Querier interface {
+	CreateCategory(ctx context.Context, arg CreateCategoryParams) (CatalogCategory, error)
+	CreateImage(ctx context.Context, arg CreateImageParams) (CatalogImage, error)
+	CreateProduct(ctx context.Context, arg CreateProductParams) (CreateProductRow, error)
+	CreateVariant(ctx context.Context, arg CreateVariantParams) (CatalogVariant, error)
+	DeleteCategory(ctx context.Context, id uuid.UUID) error
+	DeleteImagesByProduct(ctx context.Context, productID uuid.UUID) error
+	DeleteProduct(ctx context.Context, id uuid.UUID) error
+	DeleteVariantsByProduct(ctx context.Context, productID uuid.UUID) error
+	GetCategoryByID(ctx context.Context, id uuid.UUID) (CatalogCategory, error)
+	GetCategoryBySlug(ctx context.Context, slug string) (CatalogCategory, error)
+	GetProductByID(ctx context.Context, id uuid.UUID) (GetProductByIDRow, error)
+	GetProductBySlug(ctx context.Context, slug string) (GetProductBySlugRow, error)
 	HealthCheck(ctx context.Context) (int32, error)
+	ListAdminProducts(ctx context.Context, arg ListAdminProductsParams) ([]ListAdminProductsRow, error)
+	ListCategories(ctx context.Context) ([]CatalogCategory, error)
+	ListImagesByProduct(ctx context.Context, productID uuid.UUID) ([]CatalogImage, error)
+	ListPublishedProducts(ctx context.Context, arg ListPublishedProductsParams) ([]ListPublishedProductsRow, error)
+	ListVariantsByProduct(ctx context.Context, productID uuid.UUID) ([]CatalogVariant, error)
+	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]SearchProductsRow, error)
+	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (CatalogCategory, error)
+	UpdateProduct(ctx context.Context, arg UpdateProductParams) (UpdateProductRow, error)
 }
 
 var _ Querier = (*Queries)(nil)
