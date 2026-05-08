@@ -1,0 +1,31 @@
+# binaries
+/bin/
+*.exe
+*.test
+*.out
+
+# go workspace
+go.work
+go.work.sum
+
+# env
+.env
+.env.local
+.env.*.local
+
+# editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# coverage
+coverage.txt
+cover.out
+*.cov
+
+# vendor
+/vendor/
+
+# generated (will live in repo, but local cache excluded)
+.cache/
