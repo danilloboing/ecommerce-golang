@@ -27,7 +27,8 @@ func TestAPI_Smoke_HealthReadyMetrics(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	cmd := exec.CommandContext(ctx, "go", "run", "./cmd/api")
+	bin := testutil.BuildAPIBinary(t)
+	cmd := exec.CommandContext(ctx, bin)
 	cmd.Env = append(os.Environ(),
 		"APP_PORT="+port,
 		"APP_ENV=test",

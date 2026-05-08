@@ -91,5 +91,25 @@ func projectRoot(t *testing.T) string {
 	}
 }
 
+// ProjectRoot exports projectRoot for use in tests outside this package.
+func ProjectRoot(t *testing.T) string {
+	t.Helper()
+	return projectRoot(t)
+}
+
+// BuildAPIBinary compiles cmd/api into a temp binary and returns its path.
+// The binary is removed at test cleanup.
+func BuildAPIBinary(t *testing.T) string {
+	t.Helper()
+
+	tmp := t.TempDir()
+	bin := filepath.Join(tmp, "api")
+	cmd := exec.Command("go", "build", "-o", bin, "./cmd/api")
+	cmd.Dir = projectRoot(t)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "build api: %s", out)
+	return bin
+}
+
 // _ keeps strings import used if helpers shrink.
 var _ = strings.TrimSpace
