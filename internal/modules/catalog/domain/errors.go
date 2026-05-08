@@ -18,3 +18,12 @@ var ErrCurrencyMismatch = errors.New("catalog: currency mismatch")
 
 // ErrInvalidSlug is returned when a slug is empty or contains invalid characters.
 var ErrInvalidSlug = errors.New("catalog: invalid slug")
+
+// ErrInvalidProduct is returned when a product fails its invariants.
+var ErrInvalidProduct = errors.New("catalog: invalid product")
+
+// ErrInvalidCategory is returned when a category fails its invariants.
+var ErrInvalidCategory = errors.New("catalog: invalid category")
+
+// ErrDuplicateSKU is returned when a SKU collides within a product.
+var ErrDuplicateSKU = errors.New("catalog: duplicate SKU")
