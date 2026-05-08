@@ -1,7 +1,11 @@
+version: "2"
+
 run:
   timeout: 5m
   go: "1.23"
+
 linters:
+  default: none
   enable:
     - errcheck
     - govet
@@ -11,8 +15,6 @@ linters:
     - gocyclo
     - gosec
     - goconst
-    - gofumpt
-    - goimports
     - revive
     - sqlclosecheck
     - nilerr
@@ -20,20 +22,27 @@ linters:
     - bodyclose
     - noctx
     - prealloc
-linters-settings:
-  gocyclo:
-    min-complexity: 15
-  goimports:
-    local-prefixes: github.com/danilloboing/marketplace-golang
-  revive:
+  settings:
+    gocyclo:
+      min-complexity: 15
+    revive:
+      rules:
+        - name: exported
+          severity: warning
+        - name: package-comments
+          severity: warning
+  exclusions:
     rules:
-      - name: exported
-        severity: warning
-      - name: package-comments
-        severity: warning
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gosec
-        - errcheck
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/danilloboing/marketplace-golang
