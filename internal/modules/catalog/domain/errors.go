@@ -15,3 +15,6 @@ var ErrNegativeAmount = errors.New("catalog: negative amount")
 // ErrCurrencyMismatch is returned when two Money values with different
 // currencies are combined.
 var ErrCurrencyMismatch = errors.New("catalog: currency mismatch")
+
+// ErrInvalidSlug is returned when a slug is empty or contains invalid characters.
+var ErrInvalidSlug = errors.New("catalog: invalid slug")
