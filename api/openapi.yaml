@@ -3,8 +3,8 @@ info:
   title: Marketplace Golang API
   description: |
     REST API for the marketplace-golang single-vendor e-commerce backend.
-    Phase 1b adds catalog endpoints (read for the public, CRUD for admin).
-  version: 0.2.0
+    Phase 1c adds admin image upload with variant generation.
+  version: 0.3.0
 servers:
   - url: http://localhost:8080
     description: Local development
@@ -213,6 +213,38 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Category" }
+  /admin/products/{id}/images:
+    post:
+      summary: Upload an image for a product (admin)
+      operationId: adminUploadProductImage
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:     { type: string, format: binary }
+                altText:  { type: string }
+                position: { type: integer }
+              required: [file]
+      responses:
+        "201":
+          description: Uploaded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Image" }
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 components:
   securitySchemes:
     bearerAuth:
@@ -241,7 +273,16 @@ components:
         url: { type: string }
         altText: { type: string }
         position: { type: integer }
+        variants: { $ref: "#/components/schemas/ImageVariants" }
       required: [id, url, altText, position]
+    ImageVariants:
+      type: object
+      properties:
+        original: { type: string }
+        thumb:    { type: string }
+        medium:   { type: string }
+        large:    { type: string }
+      required: [original, thumb, medium, large]
     Product:
       type: object
       properties:
