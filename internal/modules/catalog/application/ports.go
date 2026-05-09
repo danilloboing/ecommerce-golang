@@ -3,10 +3,12 @@ package application
 
 import (
 	"context"
+	"io"
 
 	"github.com/google/uuid"
 
 	"github.com/danilloboing/marketplace-golang/internal/modules/catalog/domain"
+	imagex "github.com/danilloboing/marketplace-golang/internal/platform/image"
 )
 
 // ProductReader exposes catalog read operations to other modules and HTTP layer.
@@ -35,4 +37,21 @@ type CategoryWriter interface {
 	CreateCategory(ctx context.Context, c domain.Category) error
 	UpdateCategory(ctx context.Context, c domain.Category) error
 	DeleteCategory(ctx context.Context, id uuid.UUID) error
+}
+
+// ImageStorage abstracts the storage backend for image bytes.
+type ImageStorage interface {
+	Put(ctx context.Context, key string, body io.Reader, size int64, contentType string) error
+	URL(key string) string
+	Delete(ctx context.Context, key string) error
+}
+
+// ImageProcessor abstracts variant generation.
+type ImageProcessor interface {
+	Generate(src io.Reader) ([]imagex.Variant, error)
+}
+
+// ImageRepository persists image rows tied to products.
+type ImageRepository interface {
+	AttachImage(ctx context.Context, productID uuid.UUID, img domain.Image) error
 }
