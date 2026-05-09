@@ -13,21 +13,24 @@ import (
 
 // Module wires the catalog bounded context onto an HTTP router.
 type Module struct {
-	publicHandler *transport.PublicHandler
-	adminHandler  *transport.AdminHandler
-	adminToken    string
+	publicHandler     *transport.PublicHandler
+	adminHandler      *transport.AdminHandler
+	adminImageHandler *transport.AdminImageHandler
+	adminToken        string
 }
 
 // New builds the catalog module from its raw dependencies.
-func New(pool *pgxpool.Pool, adminToken string) *Module {
+func New(pool *pgxpool.Pool, store application.ImageStorage, processor application.ImageProcessor, adminToken string) *Module {
 	repo := infrastructure.New(pool)
 	publicSvc := application.NewPublicService(repo, repo)
 	adminSvc := application.NewAdminService(repo)
+	imageSvc := application.NewImageService(store, processor, repo)
 
 	return &Module{
-		publicHandler: transport.NewPublicHandler(publicSvc),
-		adminHandler:  transport.NewAdminHandler(adminSvc),
-		adminToken:    adminToken,
+		publicHandler:     transport.NewPublicHandler(publicSvc),
+		adminHandler:      transport.NewAdminHandler(adminSvc),
+		adminImageHandler: transport.NewAdminImageHandler(imageSvc),
+		adminToken:        adminToken,
 	}
 }
 
@@ -39,5 +42,6 @@ func (m *Module) Mount(r chi.Router) {
 	r.Group(func(admin chi.Router) {
 		admin.Use(adminauth.RequireToken(m.adminToken))
 		m.adminHandler.RegisterAdminRoutes(admin)
+		m.adminImageHandler.RegisterAdminImageRoutes(admin)
 	})
 }
