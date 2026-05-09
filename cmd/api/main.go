@@ -19,6 +19,7 @@ import (
 	"github.com/danilloboing/marketplace-golang/internal/core/health"
 	"github.com/danilloboing/marketplace-golang/internal/core/httpx"
 	"github.com/danilloboing/marketplace-golang/internal/core/observability"
+	"github.com/danilloboing/marketplace-golang/internal/modules/catalog"
 	internalpostgres "github.com/danilloboing/marketplace-golang/internal/platform/postgres"
 	internalredis "github.com/danilloboing/marketplace-golang/internal/platform/redis"
 )
@@ -107,6 +108,9 @@ func run() error {
 	router.Get("/health", healthHandler.Liveness)
 	router.Get("/ready", healthHandler.Readiness)
 	router.Method("GET", "/metrics", metrics.Handler())
+
+	catalogModule := catalog.New(pool, cfg.Admin.APIToken)
+	catalogModule.Mount(router)
 
 	srv := httpx.NewServer(httpx.ServerOptions{
 		Addr:            fmt.Sprintf(":%d", cfg.App.Port),

@@ -3,3 +3,39 @@
 //   sqlc v1.31.1
 
 package queries
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type CatalogCategory struct {
+	ID        uuid.UUID
+	Slug      string
+	Name      string
+	ParentID  *uuid.UUID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type CatalogImage struct {
+	ID        uuid.UUID
+	ProductID uuid.UUID
+	VariantID *uuid.UUID
+	Url       string
+	AltText   string
+	Position  int32
+	CreatedAt time.Time
+}
+
+type CatalogVariant struct {
+	ID         uuid.UUID
+	ProductID  uuid.UUID
+	Sku        string
+	Size       string
+	Color      string
+	PriceCents *int64
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}

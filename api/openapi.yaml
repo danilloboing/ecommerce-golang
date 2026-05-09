@@ -3,9 +3,8 @@ info:
   title: Marketplace Golang API
   description: |
     REST API for the marketplace-golang single-vendor e-commerce backend.
-    Phase 1a exposes only liveness, readiness, and metrics; domain endpoints
-    are added in subsequent phases.
-  version: 0.1.0
+    Phase 1b adds catalog endpoints (read for the public, CRUD for admin).
+  version: 0.2.0
 servers:
   - url: http://localhost:8080
     description: Local development
@@ -13,7 +12,6 @@ paths:
   /health:
     get:
       summary: Liveness probe
-      description: Returns 200 if the process is running.
       operationId: getHealth
       responses:
         "200":
@@ -23,41 +21,298 @@ paths:
               schema:
                 type: object
                 properties:
-                  status:
-                    type: string
-                    enum: [ok]
+                  status: { type: string, enum: [ok] }
                 required: [status]
   /ready:
     get:
       summary: Readiness probe
-      description: Returns 200 if all backing services are reachable.
       operationId: getReady
       responses:
         "200":
           description: All checks healthy
           content:
             application/json:
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
+              schema: { type: object, additionalProperties: { type: string } }
         "503":
           description: One or more checks failed
           content:
             application/json:
-              schema:
-                type: object
-                additionalProperties:
-                  type: string
+              schema: { type: object, additionalProperties: { type: string } }
   /metrics:
     get:
       summary: Prometheus metrics
-      description: Prometheus exposition format.
       operationId: getMetrics
       responses:
         "200":
           description: Metrics text
           content:
             text/plain:
+              schema: { type: string }
+  /products:
+    get:
+      summary: List published products
+      operationId: listProducts
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: categoryId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: brand
+          in: query
+          schema: { type: string }
+        - name: minPriceCents
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: maxPriceCents
+          in: query
+          schema: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Products
+          content:
+            application/json:
               schema:
-                type: string
+                type: array
+                items: { $ref: "#/components/schemas/Product" }
+  /products/{slug}:
+    get:
+      summary: Get product by slug
+      operationId: getProductBySlug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /search:
+    get:
+      summary: Free-text product search
+      operationId: searchProducts
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Matched products
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Product" }
+        "400":
+          description: Invalid query
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /categories:
+    get:
+      summary: List all categories
+      operationId: listCategories
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Category" }
+  /admin/products:
+    post:
+      summary: Create a product (admin)
+      operationId: adminCreateProduct
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/products/{id}:
+    put:
+      summary: Update a product (admin)
+      operationId: adminUpdateProduct
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductWriteBody" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    delete:
+      summary: Delete a product (admin)
+      operationId: adminDeleteProduct
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /admin/categories:
+    post:
+      summary: Create a category (admin)
+      operationId: adminCreateCategory
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryWriteBody" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Money:
+      type: object
+      properties:
+        amountCents: { type: integer, minimum: 0 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+      required: [amountCents, currency]
+    Variant:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        sku: { type: string }
+        size: { type: string }
+        color: { type: string }
+        price: { $ref: "#/components/schemas/Money" }
+      required: [id, sku, size, color]
+    Image:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string }
+        altText: { type: string }
+        position: { type: integer }
+      required: [id, url, altText, position]
+    Product:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        brand: { type: string }
+        categoryId: { type: string, format: uuid }
+        basePrice: { $ref: "#/components/schemas/Money" }
+        status: { type: string, enum: [draft, published, archived] }
+        variants:
+          type: array
+          items: { $ref: "#/components/schemas/Variant" }
+        images:
+          type: array
+          items: { $ref: "#/components/schemas/Image" }
+      required: [id, slug, name, categoryId, basePrice, status, variants, images]
+    Category:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        parentId: { type: string, format: uuid, nullable: true }
+      required: [id, slug, name]
+    ProductWriteBody:
+      type: object
+      properties:
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        brand: { type: string }
+        categoryId: { type: string, format: uuid }
+        basePriceCents: { type: integer, minimum: 0 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        status: { type: string, enum: [draft, published, archived] }
+        variants:
+          type: array
+          items:
+            type: object
+            properties:
+              sku: { type: string }
+              size: { type: string }
+              color: { type: string }
+              priceCents: { type: integer, minimum: 0 }
+            required: [sku, size, color]
+        images:
+          type: array
+          items:
+            type: object
+            properties:
+              url: { type: string }
+              altText: { type: string }
+              position: { type: integer }
+            required: [url]
+      required: [slug, name, categoryId, basePriceCents, currency, status]
+    CategoryWriteBody:
+      type: object
+      properties:
+        slug: { type: string }
+        name: { type: string }
+        parentId: { type: string, format: uuid, nullable: true }
+      required: [slug, name]
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+          required: [code, message]
+      required: [error]

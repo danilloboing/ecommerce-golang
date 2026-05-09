@@ -3,6 +3,10 @@ package testutil
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,3 +46,70 @@ func NewTestPostgresURL(t *testing.T) string {
 
 	return dsn
 }
+
+// ApplyMigrations runs Atlas against the given DSN to bring the schema up.
+// Requires the atlas binary on PATH (or at $GOPATH/bin/atlas).
+func ApplyMigrations(t *testing.T, dsn string) {
+	t.Helper()
+	atlas := atlasBinary()
+	root := projectRoot(t)
+	cmd := exec.Command(atlas, "migrate", "apply",
+		"--dir", "file://db/migrations",
+		"--url", dsn,
+	)
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "atlas migrate apply: %s", out)
+}
+
+func atlasBinary() string {
+	if path, err := exec.LookPath("atlas"); err == nil {
+		return path
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidate := filepath.Join(home, "go", "bin", "atlas")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return "atlas"
+}
+
+func projectRoot(t *testing.T) string {
+	t.Helper()
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	for {
+		if _, err := os.Stat(filepath.Join(wd, "go.mod")); err == nil {
+			return wd
+		}
+		parent := filepath.Dir(wd)
+		if parent == wd || parent == "" {
+			t.Fatal("could not locate go.mod root")
+		}
+		wd = parent
+	}
+}
+
+// ProjectRoot exports projectRoot for use in tests outside this package.
+func ProjectRoot(t *testing.T) string {
+	t.Helper()
+	return projectRoot(t)
+}
+
+// BuildAPIBinary compiles cmd/api into a temp binary and returns its path.
+// The binary is removed at test cleanup.
+func BuildAPIBinary(t *testing.T) string {
+	t.Helper()
+
+	tmp := t.TempDir()
+	bin := filepath.Join(tmp, "api")
+	cmd := exec.Command("go", "build", "-o", bin, "./cmd/api")
+	cmd.Dir = projectRoot(t)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "build api: %s", out)
+	return bin
+}
+
+// _ keeps strings import used if helpers shrink.
+var _ = strings.TrimSpace
