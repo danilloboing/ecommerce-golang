@@ -25,6 +25,7 @@ func TestCatalogE2E_AdminCreateAndPublicList(t *testing.T) {
 	dsn := testutil.NewTestPostgresURL(t)
 	testutil.ApplyMigrations(t, dsn)
 	addr := testutil.NewTestRedisAddr(t)
+	minio := testutil.NewTestMinio(t)
 
 	port := "18092"
 
@@ -41,6 +42,13 @@ func TestCatalogE2E_AdminCreateAndPublicList(t *testing.T) {
 		"REDIS_ADDR="+addr,
 		"ADMIN_API_TOKEN=secret",
 		"CORS_ALLOWED_ORIGINS=http://test.local",
+		"STORAGE_ENDPOINT="+minio.Endpoint,
+		"STORAGE_ACCESS_KEY_ID="+minio.AccessKeyID,
+		"STORAGE_SECRET_ACCESS_KEY="+minio.SecretAccessKey,
+		"STORAGE_BUCKET=marketplace-test",
+		"STORAGE_REGION=us-east-1",
+		"STORAGE_PUBLIC_BASE_URL="+minio.Endpoint+"/marketplace-test",
+		"STORAGE_USE_PATH_STYLE=true",
 	)
 	var logBuf bytes.Buffer
 	cmd.Stdout = &logBuf

@@ -25,6 +25,11 @@ func TestLoad_ParsesAllFieldsFromEnv(t *testing.T) {
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://a.com,http://b.com")
 	t.Setenv("OTEL_SERVICE_NAME", "test-svc")
 	t.Setenv("OTEL_TRACES_SAMPLER_RATIO", "0.5")
+	t.Setenv("STORAGE_ENDPOINT", "http://minio:9000")
+	t.Setenv("STORAGE_ACCESS_KEY_ID", "ak")
+	t.Setenv("STORAGE_SECRET_ACCESS_KEY", "sk")
+	t.Setenv("STORAGE_BUCKET", "marketplace")
+	t.Setenv("STORAGE_PUBLIC_BASE_URL", "https://cdn.example/marketplace")
 
 	cfg, err := config.Load()
 
@@ -44,11 +49,26 @@ func TestLoad_ParsesAllFieldsFromEnv(t *testing.T) {
 	assert.Equal(t, []string{"http://a.com", "http://b.com"}, cfg.CORS.AllowedOrigins)
 	assert.Equal(t, "test-svc", cfg.Observability.OTELServiceName)
 	assert.InDelta(t, 0.5, cfg.Observability.OTELTracesSamplerRatio, 0.0001)
+	assert.Equal(t, "http://minio:9000", cfg.Storage.Endpoint)
+	assert.Equal(t, "marketplace", cfg.Storage.Bucket)
+	assert.Equal(t, "https://cdn.example/marketplace", cfg.Storage.PublicBaseURL)
+	assert.True(t, cfg.Storage.UsePathStyle)
+	assert.Equal(t, "auto", cfg.Storage.Region)
+}
+
+func setStorageEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("STORAGE_ENDPOINT", "http://minio:9000")
+	t.Setenv("STORAGE_ACCESS_KEY_ID", "ak")
+	t.Setenv("STORAGE_SECRET_ACCESS_KEY", "sk")
+	t.Setenv("STORAGE_BUCKET", "marketplace")
+	t.Setenv("STORAGE_PUBLIC_BASE_URL", "https://cdn.example/marketplace")
 }
 
 func TestLoad_RequiresDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 	t.Setenv("ADMIN_API_TOKEN", "x")
+	setStorageEnv(t)
 
 	_, err := config.Load()
 
@@ -59,6 +79,7 @@ func TestLoad_RequiresDatabaseURL(t *testing.T) {
 func TestLoad_RequiresAdminAPIToken(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
 	t.Setenv("ADMIN_API_TOKEN", "")
+	setStorageEnv(t)
 
 	_, err := config.Load()
 
@@ -66,9 +87,22 @@ func TestLoad_RequiresAdminAPIToken(t *testing.T) {
 	assert.Contains(t, err.Error(), "ADMIN_API_TOKEN")
 }
 
+func TestLoad_RequiresStorageBucket(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("ADMIN_API_TOKEN", "x")
+	setStorageEnv(t)
+	t.Setenv("STORAGE_BUCKET", "")
+
+	_, err := config.Load()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "STORAGE_BUCKET")
+}
+
 func TestLoad_AppliesDefaults(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
 	t.Setenv("ADMIN_API_TOKEN", "x")
+	setStorageEnv(t)
 
 	cfg, err := config.Load()
 

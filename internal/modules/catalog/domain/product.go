@@ -28,12 +28,15 @@ type Variant struct {
 	Price *Money // nil = inherit Product.BasePrice
 }
 
-// Image is a stored URL pointing to a product photo.
+// Image is a stored URL pointing to a product photo with optional resized
+// variants delivered through the CDN.
 type Image struct {
-	ID       uuid.UUID
-	URL      string
-	Position int
-	AltText  string
+	ID         uuid.UUID
+	URL        string
+	Position   int
+	AltText    string
+	Variants   *ImageVariants
+	StorageKey string
 }
 
 // Product is the aggregate root of the catalog domain.

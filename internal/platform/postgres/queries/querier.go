@@ -16,6 +16,7 @@ type Querier interface {
 	CreateProduct(ctx context.Context, arg CreateProductParams) (CreateProductRow, error)
 	CreateVariant(ctx context.Context, arg CreateVariantParams) (CatalogVariant, error)
 	DeleteCategory(ctx context.Context, id uuid.UUID) error
+	DeleteImageByID(ctx context.Context, id uuid.UUID) error
 	DeleteImagesByProduct(ctx context.Context, productID uuid.UUID) error
 	DeleteProduct(ctx context.Context, id uuid.UUID) error
 	DeleteVariantsByProduct(ctx context.Context, productID uuid.UUID) error

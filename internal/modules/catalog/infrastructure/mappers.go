@@ -98,12 +98,27 @@ func mapProduct(row productRow, variants []queries.CatalogVariant, images []quer
 
 	mappedImages := make([]domain.Image, 0, len(images))
 	for _, img := range images {
-		mappedImages = append(mappedImages, domain.Image{
+		di := domain.Image{
 			ID:       img.ID,
 			URL:      img.Url,
 			Position: int(img.Position),
 			AltText:  img.AltText,
-		})
+		}
+		if img.StorageKey != nil {
+			di.StorageKey = *img.StorageKey
+		}
+		if img.UrlThumb != nil && img.UrlMedium != nil && img.UrlLarge != nil {
+			variants, err := domain.NewImageVariants(domain.ImageVariantURLs{
+				Original: img.Url,
+				Thumb:    *img.UrlThumb,
+				Medium:   *img.UrlMedium,
+				Large:    *img.UrlLarge,
+			})
+			if err == nil {
+				di.Variants = &variants
+			}
+		}
+		mappedImages = append(mappedImages, di)
 	}
 
 	return domain.NewProduct(domain.NewProductInput{

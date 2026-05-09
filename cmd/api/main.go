@@ -20,8 +20,10 @@ import (
 	"github.com/danilloboing/marketplace-golang/internal/core/httpx"
 	"github.com/danilloboing/marketplace-golang/internal/core/observability"
 	"github.com/danilloboing/marketplace-golang/internal/modules/catalog"
+	imagex "github.com/danilloboing/marketplace-golang/internal/platform/image"
 	internalpostgres "github.com/danilloboing/marketplace-golang/internal/platform/postgres"
 	internalredis "github.com/danilloboing/marketplace-golang/internal/platform/redis"
+	"github.com/danilloboing/marketplace-golang/internal/platform/storage/r2"
 )
 
 func main() {
@@ -91,6 +93,12 @@ func run() error {
 	}
 	defer func() { _ = rdb.Close() }()
 
+	storeClient, err := r2.New(rootCtx, cfg.Storage)
+	if err != nil {
+		return fmt.Errorf("connect storage: %w", err)
+	}
+	imageProcessor := imagex.New()
+
 	metrics := observability.NewMetrics()
 
 	healthHandler := health.NewHandler(map[string]health.Checker{
@@ -109,7 +117,7 @@ func run() error {
 	router.Get("/ready", healthHandler.Readiness)
 	router.Method("GET", "/metrics", metrics.Handler())
 
-	catalogModule := catalog.New(pool, cfg.Admin.APIToken)
+	catalogModule := catalog.New(pool, storeClient, imageProcessor, cfg.Admin.APIToken)
 	catalogModule.Mount(router)
 
 	srv := httpx.NewServer(httpx.ServerOptions{

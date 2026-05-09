@@ -36,10 +36,19 @@ type VariantResponse struct {
 
 // ImageResponse is the public-facing image DTO.
 type ImageResponse struct {
-	ID       string `json:"id"`
-	URL      string `json:"url"`
-	AltText  string `json:"altText"`
-	Position int    `json:"position"`
+	ID       string                 `json:"id"`
+	URL      string                 `json:"url"`
+	AltText  string                 `json:"altText"`
+	Position int                    `json:"position"`
+	Variants *ImageVariantsResponse `json:"variants,omitempty"`
+}
+
+// ImageVariantsResponse mirrors domain.ImageVariants for JSON output.
+type ImageVariantsResponse struct {
+	Original string `json:"original"`
+	Thumb    string `json:"thumb"`
+	Medium   string `json:"medium"`
+	Large    string `json:"large"`
 }
 
 // CategoryResponse is the public-facing category DTO.
@@ -82,14 +91,28 @@ func toProductResponse(p domain.Product) ProductResponse {
 		r.Variants = append(r.Variants, vr)
 	}
 	for _, img := range p.Images() {
-		r.Images = append(r.Images, ImageResponse{
-			ID:       img.ID.String(),
-			URL:      img.URL,
-			AltText:  img.AltText,
-			Position: img.Position,
-		})
+		r.Images = append(r.Images, toImageResponse(img))
 	}
 	return r
+}
+
+func toImageResponse(img domain.Image) ImageResponse {
+	out := ImageResponse{
+		ID:       img.ID.String(),
+		URL:      img.URL,
+		AltText:  img.AltText,
+		Position: img.Position,
+	}
+	if img.Variants != nil {
+		urls := img.Variants.URLs()
+		out.Variants = &ImageVariantsResponse{
+			Original: urls.Original,
+			Thumb:    urls.Thumb,
+			Medium:   urls.Medium,
+			Large:    urls.Large,
+		}
+	}
+	return out
 }
 
 func toCategoryResponse(c domain.Category) CategoryResponse {
