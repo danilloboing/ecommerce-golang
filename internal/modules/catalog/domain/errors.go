@@ -27,3 +27,6 @@ var ErrInvalidCategory = errors.New("catalog: invalid category")
 
 // ErrDuplicateSKU is returned when a SKU collides within a product.
 var ErrDuplicateSKU = errors.New("catalog: duplicate SKU")
+
+// ErrInvalidImageVariants is returned when one or more variant URLs are missing.
+var ErrInvalidImageVariants = errors.New("catalog: invalid image variants")
