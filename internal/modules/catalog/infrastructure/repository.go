@@ -239,13 +239,25 @@ func persistChildren(ctx context.Context, q *queries.Queries, p domain.Product) 
 	}
 
 	for _, img := range p.Images() {
-		if _, err := q.CreateImage(ctx, queries.CreateImageParams{
+		params := queries.CreateImageParams{
 			ID:        img.ID,
 			ProductID: p.ID(),
 			Url:       img.URL,
 			AltText:   img.AltText,
 			Position:  int32(img.Position),
-		}); err != nil {
+		}
+		if img.Variants != nil {
+			urls := img.Variants.URLs()
+			thumb, medium, large := urls.Thumb, urls.Medium, urls.Large
+			params.UrlThumb = &thumb
+			params.UrlMedium = &medium
+			params.UrlLarge = &large
+		}
+		if img.StorageKey != "" {
+			key := img.StorageKey
+			params.StorageKey = &key
+		}
+		if _, err := q.CreateImage(ctx, params); err != nil {
 			return fmt.Errorf("catalog repo: create image: %w", err)
 		}
 	}
@@ -293,6 +305,32 @@ func (r *Repository) UpdateCategory(ctx context.Context, c domain.Category) erro
 func (r *Repository) DeleteCategory(ctx context.Context, id uuid.UUID) error {
 	if err := r.q.DeleteCategory(ctx, id); err != nil {
 		return fmt.Errorf("catalog repo: delete category: %w", err)
+	}
+	return nil
+}
+
+// AttachImage persists a single image row tied to an existing product.
+func (r *Repository) AttachImage(ctx context.Context, productID uuid.UUID, img domain.Image) error {
+	params := queries.CreateImageParams{
+		ID:        img.ID,
+		ProductID: productID,
+		Url:       img.URL,
+		AltText:   img.AltText,
+		Position:  int32(img.Position),
+	}
+	if img.Variants != nil {
+		urls := img.Variants.URLs()
+		thumb, medium, large := urls.Thumb, urls.Medium, urls.Large
+		params.UrlThumb = &thumb
+		params.UrlMedium = &medium
+		params.UrlLarge = &large
+	}
+	if img.StorageKey != "" {
+		key := img.StorageKey
+		params.StorageKey = &key
+	}
+	if _, err := r.q.CreateImage(ctx, params); err != nil {
+		return fmt.Errorf("catalog repo: attach image: %w", err)
 	}
 	return nil
 }

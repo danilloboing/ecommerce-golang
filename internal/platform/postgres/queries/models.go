@@ -27,6 +27,11 @@ type CatalogImage struct {
 	AltText   string
 	Position  int32
 	CreatedAt time.Time
+	UrlThumb  *string
+	UrlMedium *string
+	UrlLarge  *string
+	// R2 object key prefix (e.g. products/{pid}/{iid})
+	StorageKey *string
 }
 
 type CatalogVariant struct {

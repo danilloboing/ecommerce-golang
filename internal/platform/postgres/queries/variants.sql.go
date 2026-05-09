@@ -12,18 +12,23 @@ import (
 )
 
 const createImage = `-- name: CreateImage :one
-INSERT INTO catalog_images (id, product_id, variant_id, url, alt_text, position)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, product_id, variant_id, url, alt_text, position, created_at
+INSERT INTO catalog_images (id, product_id, variant_id, url, alt_text, position,
+                            url_thumb, url_medium, url_large, storage_key)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, product_id, variant_id, url, alt_text, position, created_at, url_thumb, url_medium, url_large, storage_key
 `
 
 type CreateImageParams struct {
-	ID        uuid.UUID
-	ProductID uuid.UUID
-	VariantID *uuid.UUID
-	Url       string
-	AltText   string
-	Position  int32
+	ID         uuid.UUID
+	ProductID  uuid.UUID
+	VariantID  *uuid.UUID
+	Url        string
+	AltText    string
+	Position   int32
+	UrlThumb   *string
+	UrlMedium  *string
+	UrlLarge   *string
+	StorageKey *string
 }
 
 func (q *Queries) CreateImage(ctx context.Context, arg CreateImageParams) (CatalogImage, error) {
@@ -34,6 +39,10 @@ func (q *Queries) CreateImage(ctx context.Context, arg CreateImageParams) (Catal
 		arg.Url,
 		arg.AltText,
 		arg.Position,
+		arg.UrlThumb,
+		arg.UrlMedium,
+		arg.UrlLarge,
+		arg.StorageKey,
 	)
 	var i CatalogImage
 	err := row.Scan(
@@ -44,6 +53,10 @@ func (q *Queries) CreateImage(ctx context.Context, arg CreateImageParams) (Catal
 		&i.AltText,
 		&i.Position,
 		&i.CreatedAt,
+		&i.UrlThumb,
+		&i.UrlMedium,
+		&i.UrlLarge,
+		&i.StorageKey,
 	)
 	return i, err
 }
@@ -86,6 +99,15 @@ func (q *Queries) CreateVariant(ctx context.Context, arg CreateVariantParams) (C
 	return i, err
 }
 
+const deleteImageByID = `-- name: DeleteImageByID :exec
+DELETE FROM catalog_images WHERE id = $1
+`
+
+func (q *Queries) DeleteImageByID(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteImageByID, id)
+	return err
+}
+
 const deleteImagesByProduct = `-- name: DeleteImagesByProduct :exec
 DELETE FROM catalog_images WHERE product_id = $1
 `
@@ -105,7 +127,7 @@ func (q *Queries) DeleteVariantsByProduct(ctx context.Context, productID uuid.UU
 }
 
 const listImagesByProduct = `-- name: ListImagesByProduct :many
-SELECT id, product_id, variant_id, url, alt_text, position, created_at FROM catalog_images WHERE product_id = $1 ORDER BY position, created_at
+SELECT id, product_id, variant_id, url, alt_text, position, created_at, url_thumb, url_medium, url_large, storage_key FROM catalog_images WHERE product_id = $1 ORDER BY position, created_at
 `
 
 func (q *Queries) ListImagesByProduct(ctx context.Context, productID uuid.UUID) ([]CatalogImage, error) {
@@ -125,6 +147,10 @@ func (q *Queries) ListImagesByProduct(ctx context.Context, productID uuid.UUID) 
 			&i.AltText,
 			&i.Position,
 			&i.CreatedAt,
+			&i.UrlThumb,
+			&i.UrlMedium,
+			&i.UrlLarge,
+			&i.StorageKey,
 		); err != nil {
 			return nil, err
 		}
