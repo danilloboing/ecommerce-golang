@@ -5,9 +5,9 @@ import (
 	"bytes"
 	"fmt"
 	"image"
-	_ "image/gif"  // register decoders
+	_ "image/gif" // register decoders
 	"image/jpeg"
-	_ "image/png"  // register decoders
+	_ "image/png" // register decoders
 	"io"
 
 	"github.com/disintegration/imaging"
