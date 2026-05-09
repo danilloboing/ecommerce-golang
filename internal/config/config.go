@@ -16,6 +16,7 @@ type Config struct {
 	Admin         Admin
 	CORS          CORS
 	Observability Observability
+	Storage       Storage
 }
 
 // App holds general application settings.
@@ -57,6 +58,17 @@ type Observability struct {
 	OTELExporterEndpoint   string  `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
 	OTELServiceName        string  `env:"OTEL_SERVICE_NAME" envDefault:"marketplace-golang-api"`
 	OTELTracesSamplerRatio float64 `env:"OTEL_TRACES_SAMPLER_RATIO" envDefault:"0.1"`
+}
+
+// Storage holds object storage settings (R2 / S3 compatible).
+type Storage struct {
+	Endpoint        string `env:"STORAGE_ENDPOINT,required,notEmpty"`
+	AccessKeyID     string `env:"STORAGE_ACCESS_KEY_ID,required,notEmpty"`
+	SecretAccessKey string `env:"STORAGE_SECRET_ACCESS_KEY,required,notEmpty"`
+	Bucket          string `env:"STORAGE_BUCKET,required,notEmpty"`
+	Region          string `env:"STORAGE_REGION" envDefault:"auto"`
+	PublicBaseURL   string `env:"STORAGE_PUBLIC_BASE_URL,required,notEmpty"`
+	UsePathStyle    bool   `env:"STORAGE_USE_PATH_STYLE" envDefault:"true"`
 }
 
 // Load parses configuration from environment variables.
