@@ -44,3 +44,35 @@ func TestWriteError_UnknownErrorReturns500(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
+
+func TestError_WritesJSONWithCodeAndMessage(t *testing.T) {
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/x", nil)
+
+	responsex.Error(rec, r, http.StatusForbidden, "csrf_invalid", "csrf token invalid")
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+
+	var body struct {
+		Error struct {
+			Code, Message string
+		}
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, "csrf_invalid", body.Error.Code)
+	assert.Equal(t, "csrf token invalid", body.Error.Message)
+}
+
+func TestJSON_WritesPayloadWithStatus(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	responsex.JSON(rec, http.StatusCreated, map[string]string{"id": "abc"})
+
+	assert.Equal(t, http.StatusCreated, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, "abc", body["id"])
+}
