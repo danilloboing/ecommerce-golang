@@ -9,6 +9,7 @@ import (
 	"github.com/danilloboing/marketplace-golang/internal/modules/identity/domain"
 	"github.com/danilloboing/marketplace-golang/internal/platform/email"
 	pw "github.com/danilloboing/marketplace-golang/internal/platform/passwords"
+	tk "github.com/danilloboing/marketplace-golang/internal/platform/tokens"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -16,6 +17,8 @@ import (
 )
 
 var passwordsHashFn = pw.Hash
+
+var tokensGenerate = tk.Generate
 
 // --- mocks ---
 
@@ -282,4 +285,122 @@ func passwordsHash(t *testing.T, plain string) (string, error) {
 func ptrTimeNow() *time.Time {
 	t := time.Now().UTC()
 	return &t
+}
+
+func TestVerifyEmail_HappyPath(t *testing.T) {
+	users := &fakeUserRepo{}
+	verify := &fakeVerifyRepo{}
+	uid := uuid.New()
+
+	rawHash := []byte("hashbytes------------------------")
+	now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+
+	verify.On("Find", mock.Anything, mock.AnythingOfType("[]uint8")).
+		Return(domain.EmailVerifyToken{
+			TokenHash: rawHash, UserID: uid, Email: "ana@example.com",
+			ExpiresAt: now.Add(time.Hour),
+		}, nil)
+	verify.On("Consume", mock.Anything, mock.AnythingOfType("[]uint8")).Return(nil)
+	users.On("MarkEmailVerified", mock.Anything, uid).Return(nil)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: &fakeAuthRepo{}, VerifyTokens: verify, ResetTokens: &fakeResetRepo{},
+		Email:             &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: func() time.Time { return now },
+	})
+
+	rawToken, _, _ := tokensGen()
+	require.NoError(t, svc.VerifyEmail(context.Background(), rawToken))
+}
+
+func TestVerifyEmail_RejectsExpired(t *testing.T) {
+	verify := &fakeVerifyRepo{}
+	uid := uuid.New()
+	now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+
+	verify.On("Find", mock.Anything, mock.AnythingOfType("[]uint8")).
+		Return(domain.EmailVerifyToken{
+			UserID: uid, Email: "ana@example.com",
+			ExpiresAt: now.Add(-time.Minute),
+		}, nil)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: &fakeUserRepo{}, AuthMethods: &fakeAuthRepo{}, VerifyTokens: verify, ResetTokens: &fakeResetRepo{},
+		Email:             &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: func() time.Time { return now },
+	})
+
+	rawToken, _, _ := tokensGen()
+	err := svc.VerifyEmail(context.Background(), rawToken)
+	require.ErrorIs(t, err, domain.ErrTokenExpired)
+}
+
+func TestVerifyEmail_RejectsConsumed(t *testing.T) {
+	verify := &fakeVerifyRepo{}
+	now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+	consumed := now.Add(-time.Minute)
+
+	verify.On("Find", mock.Anything, mock.AnythingOfType("[]uint8")).
+		Return(domain.EmailVerifyToken{
+			UserID: uuid.New(), Email: "ana@example.com",
+			ExpiresAt: now.Add(time.Hour), ConsumedAt: &consumed,
+		}, nil)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: &fakeUserRepo{}, AuthMethods: &fakeAuthRepo{}, VerifyTokens: verify, ResetTokens: &fakeResetRepo{},
+		Email:             &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: func() time.Time { return now },
+	})
+
+	rawToken, _, _ := tokensGen()
+	err := svc.VerifyEmail(context.Background(), rawToken)
+	require.ErrorIs(t, err, domain.ErrTokenAlreadyUsed)
+}
+
+func TestResendVerifyEmail_AlwaysReturnsNilEvenWhenEmailUnknown(t *testing.T) {
+	users := &fakeUserRepo{}
+	users.On("FindByEmail", mock.Anything, "noone@example.com").
+		Return(domain.User{}, domain.ErrUserNotFound)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: &fakeAuthRepo{},
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: &fakeResetRepo{}, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: time.Now,
+	})
+
+	require.NoError(t, svc.ResendVerifyEmail(context.Background(), "noone@example.com"))
+}
+
+func TestResendVerifyEmail_SkipsWhenAlreadyVerified(t *testing.T) {
+	users := &fakeUserRepo{}
+	uid := uuid.New()
+	users.On("FindByEmail", mock.Anything, "ana@example.com").
+		Return(domain.User{ID: uid, Email: "ana@example.com", EmailVerifiedAt: ptrTimeNow()}, nil)
+
+	verify := &fakeVerifyRepo{}
+	sender := &fakeSender{}
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: &fakeAuthRepo{},
+		VerifyTokens: verify, ResetTokens: &fakeResetRepo{}, Email: sender,
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: time.Now,
+	})
+
+	require.NoError(t, svc.ResendVerifyEmail(context.Background(), "ana@example.com"))
+	assert.Empty(t, sender.sent)
+	verify.AssertNotCalled(t, "Insert")
+}
+
+// helper to generate a real token + hash (for tests that need both ends).
+func tokensGen() (string, []byte, error) {
+	return tokensGenFn()
+}
+
+var tokensGenFn = func() (string, []byte, error) {
+	return tokensGenerate()
 }

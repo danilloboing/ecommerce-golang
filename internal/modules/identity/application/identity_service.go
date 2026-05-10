@@ -176,3 +176,73 @@ func (s *IdentityService) Login(ctx context.Context, in LoginInput) (domain.User
 
 	return user, nil
 }
+
+// VerifyEmail consumes a verify token and marks the user's email as verified.
+//
+// Returns ErrTokenNotFound, ErrTokenAlreadyUsed, or ErrTokenExpired for invalid
+// tokens. Idempotent for already-consumed tokens belonging to verified users —
+// they map to ErrTokenAlreadyUsed (transport returns 400 invalid_token, which is
+// the correct privacy-preserving behaviour: don't tell callers whose mailbox
+// it was).
+func (s *IdentityService) VerifyEmail(ctx context.Context, rawToken string) error {
+	hash, err := tokens.Hash(rawToken)
+	if err != nil {
+		return domain.ErrTokenNotFound
+	}
+	tok, err := s.deps.VerifyTokens.Find(ctx, hash)
+	if errors.Is(err, domain.ErrTokenNotFound) {
+		return domain.ErrTokenNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("identity: find verify token: %w", err)
+	}
+	if tok.IsConsumed() {
+		return domain.ErrTokenAlreadyUsed
+	}
+	if tok.IsExpired(s.deps.Now()) {
+		return domain.ErrTokenExpired
+	}
+
+	if err := s.deps.Users.MarkEmailVerified(ctx, tok.UserID); err != nil {
+		return fmt.Errorf("identity: mark verified: %w", err)
+	}
+	if err := s.deps.VerifyTokens.Consume(ctx, hash); err != nil {
+		return fmt.Errorf("identity: consume verify token: %w", err)
+	}
+	return nil
+}
+
+// ResendVerifyEmail issues a new verify token and sends a fresh email.
+// Always returns nil even when the email does not match a user (anti-enumeration).
+func (s *IdentityService) ResendVerifyEmail(ctx context.Context, addr string) error {
+	user, err := s.deps.Users.FindByEmail(ctx, addr)
+	if errors.Is(err, domain.ErrUserNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("identity: lookup user: %w", err)
+	}
+	if user.IsEmailVerified() {
+		// Already verified; do not send again.
+		return nil
+	}
+	rawToken, hash, err := tokens.Generate()
+	if err != nil {
+		return fmt.Errorf("identity: generate verify token: %w", err)
+	}
+	expires := s.deps.Now().Add(s.deps.VerifyTokenTTL).UTC()
+	if err := s.deps.VerifyTokens.Insert(ctx, hash, user.ID, user.Email, expires); err != nil {
+		return fmt.Errorf("identity: store verify token: %w", err)
+	}
+	verifyURL := s.deps.VerifyLinkBaseURL + "?token=" + rawToken
+	msg, err := email.RenderVerifyEmail(email.VerifyEmailData{
+		ToAddress: user.Email, Name: user.Name, VerifyURL: verifyURL,
+	})
+	if err != nil {
+		return fmt.Errorf("identity: render verify email: %w", err)
+	}
+	if err := s.deps.Email.Send(ctx, msg); err != nil {
+		return fmt.Errorf("identity: send verify email: %w", err)
+	}
+	return nil
+}
