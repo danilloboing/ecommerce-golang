@@ -10,6 +10,16 @@ import (
 	"github.com/google/uuid"
 )
 
+type AuthMethod struct {
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Provider        string
+	PasswordHash    *string
+	ProviderSubject *string
+	CreatedAt       time.Time
+	LastUsedAt      *time.Time
+}
+
 type CatalogCategory struct {
 	ID        uuid.UUID
 	Slug      string
@@ -43,4 +53,31 @@ type CatalogVariant struct {
 	PriceCents *int64
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+type EmailVerifyToken struct {
+	TokenHash  []byte
+	UserID     uuid.UUID
+	Email      string
+	ExpiresAt  time.Time
+	ConsumedAt *time.Time
+	CreatedAt  time.Time
+}
+
+type PasswordResetToken struct {
+	TokenHash  []byte
+	UserID     uuid.UUID
+	ExpiresAt  time.Time
+	ConsumedAt *time.Time
+	CreatedAt  time.Time
+}
+
+type User struct {
+	ID              uuid.UUID
+	Email           string
+	EmailVerifiedAt *time.Time
+	Name            string
+	Status          string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
