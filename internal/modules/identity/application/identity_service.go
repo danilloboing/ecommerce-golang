@@ -29,6 +29,16 @@ type IdentityServiceDeps struct {
 	ResetTokenTTL  time.Duration
 
 	Now func() time.Time
+
+	// RevokeAllSessions is called by the service to invalidate every active
+	// session for a user (password reset / change-password full revoke). The
+	// caller wires this to sessionauth.Manager.DeleteAllForUser.
+	RevokeAllSessions func(ctx context.Context, userID uuid.UUID) error
+
+	// RevokeAllSessionsExcept is the variant that keeps a single session id
+	// (used by ChangePassword from a logged-in browser). Wired to
+	// sessionauth.Manager.DeleteAllForUserExcept.
+	RevokeAllSessionsExcept func(ctx context.Context, userID uuid.UUID, keepID string) error
 }
 
 // IdentityService orchestrates auth flows.
@@ -46,6 +56,12 @@ func NewIdentityService(d IdentityServiceDeps) *IdentityService {
 	}
 	if d.Now == nil {
 		d.Now = time.Now
+	}
+	if d.RevokeAllSessions == nil {
+		d.RevokeAllSessions = func(context.Context, uuid.UUID) error { return nil }
+	}
+	if d.RevokeAllSessionsExcept == nil {
+		d.RevokeAllSessionsExcept = func(context.Context, uuid.UUID, string) error { return nil }
 	}
 	return &IdentityService{deps: d}
 }
@@ -243,6 +259,81 @@ func (s *IdentityService) ResendVerifyEmail(ctx context.Context, addr string) er
 	}
 	if err := s.deps.Email.Send(ctx, msg); err != nil {
 		return fmt.Errorf("identity: send verify email: %w", err)
+	}
+	return nil
+}
+
+// RequestPasswordReset issues a reset token + sends an email. Always returns nil
+// regardless of whether the email matches a user (anti-enumeration).
+func (s *IdentityService) RequestPasswordReset(ctx context.Context, addr string) error {
+	user, err := s.deps.Users.FindByEmail(ctx, addr)
+	if errors.Is(err, domain.ErrUserNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("identity: lookup user: %w", err)
+	}
+	if !user.IsEmailVerified() {
+		// We do not allow resetting an unverified account; do not leak that fact.
+		return nil
+	}
+	rawToken, hash, err := tokens.Generate()
+	if err != nil {
+		return fmt.Errorf("identity: generate reset token: %w", err)
+	}
+	expires := s.deps.Now().Add(s.deps.ResetTokenTTL).UTC()
+	if err := s.deps.ResetTokens.Insert(ctx, hash, user.ID, expires); err != nil {
+		return fmt.Errorf("identity: store reset token: %w", err)
+	}
+	resetURL := s.deps.ResetLinkBaseURL + "?token=" + rawToken
+	msg, err := email.RenderPasswordResetEmail(email.PasswordResetEmailData{
+		ToAddress: user.Email, Name: user.Name,
+		ResetURL: resetURL, ExpiryMin: int(s.deps.ResetTokenTTL / time.Minute),
+	})
+	if err != nil {
+		return fmt.Errorf("identity: render reset email: %w", err)
+	}
+	if err := s.deps.Email.Send(ctx, msg); err != nil {
+		return fmt.Errorf("identity: send reset email: %w", err)
+	}
+	return nil
+}
+
+// ConfirmPasswordReset consumes a reset token, sets a new password hash,
+// and revokes ALL sessions for the user.
+func (s *IdentityService) ConfirmPasswordReset(ctx context.Context, rawToken, newPassword string) error {
+	if err := validatePassword(newPassword); err != nil {
+		return err
+	}
+	hash, err := tokens.Hash(rawToken)
+	if err != nil {
+		return domain.ErrTokenNotFound
+	}
+	tok, err := s.deps.ResetTokens.Find(ctx, hash)
+	if errors.Is(err, domain.ErrTokenNotFound) {
+		return domain.ErrTokenNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("identity: find reset token: %w", err)
+	}
+	if tok.IsConsumed() {
+		return domain.ErrTokenAlreadyUsed
+	}
+	if tok.IsExpired(s.deps.Now()) {
+		return domain.ErrTokenExpired
+	}
+	encoded, err := passwords.Hash(newPassword)
+	if err != nil {
+		return fmt.Errorf("identity: hash new password: %w", err)
+	}
+	if err := s.deps.AuthMethods.UpdatePassword(ctx, tok.UserID, encoded); err != nil {
+		return fmt.Errorf("identity: update password: %w", err)
+	}
+	if err := s.deps.ResetTokens.Consume(ctx, hash); err != nil {
+		return fmt.Errorf("identity: consume reset token: %w", err)
+	}
+	if err := s.deps.RevokeAllSessions(ctx, tok.UserID); err != nil {
+		return fmt.Errorf("identity: revoke sessions: %w", err)
 	}
 	return nil
 }

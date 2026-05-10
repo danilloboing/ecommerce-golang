@@ -404,3 +404,103 @@ func tokensGen() (string, []byte, error) {
 var tokensGenFn = func() (string, []byte, error) {
 	return tokensGenerate()
 }
+
+func TestRequestPasswordReset_AlwaysSucceeds(t *testing.T) {
+	users := &fakeUserRepo{}
+	users.On("FindByEmail", mock.Anything, "missing@example.com").
+		Return(domain.User{}, domain.ErrUserNotFound)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: &fakeAuthRepo{},
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: &fakeResetRepo{}, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: time.Now,
+	})
+
+	require.NoError(t, svc.RequestPasswordReset(context.Background(), "missing@example.com"))
+}
+
+func TestRequestPasswordReset_HappyPathSendsEmail(t *testing.T) {
+	users := &fakeUserRepo{}
+	reset := &fakeResetRepo{}
+	sender := &fakeSender{}
+	uid := uuid.New()
+
+	users.On("FindByEmail", mock.Anything, "ana@example.com").
+		Return(domain.User{ID: uid, Email: "ana@example.com", Name: "Ana", EmailVerifiedAt: ptrTimeNow()}, nil)
+	reset.On("Insert", mock.Anything, mock.AnythingOfType("[]uint8"), uid, mock.AnythingOfType("time.Time")).
+		Return(nil)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: &fakeAuthRepo{},
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: reset, Email: sender,
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: time.Now,
+	})
+
+	require.NoError(t, svc.RequestPasswordReset(context.Background(), "ana@example.com"))
+	require.Len(t, sender.sent, 1)
+	assert.Contains(t, sender.sent[0].TextBody, "https://app/reset?token=")
+}
+
+func TestConfirmPasswordReset_HappyPathRevokesAndUpdates(t *testing.T) {
+	users := &fakeUserRepo{}
+	auths := &fakeAuthRepo{}
+	reset := &fakeResetRepo{}
+	uid := uuid.New()
+	now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+
+	reset.On("Find", mock.Anything, mock.AnythingOfType("[]uint8")).
+		Return(domain.PasswordResetToken{UserID: uid, ExpiresAt: now.Add(time.Hour)}, nil)
+	auths.On("UpdatePassword", mock.Anything, uid, mock.AnythingOfType("string")).Return(nil)
+	reset.On("Consume", mock.Anything, mock.AnythingOfType("[]uint8")).Return(nil)
+
+	revoked := 0
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: auths,
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: reset, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now:               func() time.Time { return now },
+		RevokeAllSessions: func(_ context.Context, _ uuid.UUID) error { revoked++; return nil },
+	})
+
+	rawToken, _, _ := tokensGen()
+	require.NoError(t, svc.ConfirmPasswordReset(context.Background(), rawToken, "NewS3cret!"))
+	assert.Equal(t, 1, revoked)
+}
+
+func TestConfirmPasswordReset_RejectsExpired(t *testing.T) {
+	reset := &fakeResetRepo{}
+	now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+	reset.On("Find", mock.Anything, mock.AnythingOfType("[]uint8")).
+		Return(domain.PasswordResetToken{ExpiresAt: now.Add(-time.Minute)}, nil)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: &fakeUserRepo{}, AuthMethods: &fakeAuthRepo{},
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: reset, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: func() time.Time { return now },
+	})
+
+	rawToken, _, _ := tokensGen()
+	err := svc.ConfirmPasswordReset(context.Background(), rawToken, "NewS3cret!")
+	require.ErrorIs(t, err, domain.ErrTokenExpired)
+}
+
+func TestConfirmPasswordReset_RejectsWeakPassword(t *testing.T) {
+	reset := &fakeResetRepo{}
+	now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+	reset.On("Find", mock.Anything, mock.AnythingOfType("[]uint8")).
+		Return(domain.PasswordResetToken{UserID: uuid.New(), ExpiresAt: now.Add(time.Hour)}, nil)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: &fakeUserRepo{}, AuthMethods: &fakeAuthRepo{},
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: reset, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: func() time.Time { return now },
+	})
+
+	rawToken, _, _ := tokensGen()
+	err := svc.ConfirmPasswordReset(context.Background(), rawToken, "short")
+	require.ErrorIs(t, err, domain.ErrPasswordTooWeak)
+}
