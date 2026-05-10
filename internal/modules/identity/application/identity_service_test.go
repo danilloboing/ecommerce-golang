@@ -504,3 +504,92 @@ func TestConfirmPasswordReset_RejectsWeakPassword(t *testing.T) {
 	err := svc.ConfirmPasswordReset(context.Background(), rawToken, "short")
 	require.ErrorIs(t, err, domain.ErrPasswordTooWeak)
 }
+
+func TestChangePassword_HappyPathRevokesOtherSessions(t *testing.T) {
+	users := &fakeUserRepo{}
+	auths := &fakeAuthRepo{}
+	uid := uuid.New()
+	encoded, err := passwordsHash(t, "S3cretPass!")
+	require.NoError(t, err)
+
+	auths.On("FindForUser", mock.Anything, uid, domain.AuthProviderPassword).
+		Return(domain.AuthMethod{UserID: uid, Provider: domain.AuthProviderPassword, PasswordHash: &encoded}, nil)
+	auths.On("UpdatePassword", mock.Anything, uid, mock.AnythingOfType("string")).Return(nil)
+
+	revokedExcept := ""
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: auths,
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: &fakeResetRepo{}, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: time.Now,
+		RevokeAllSessionsExcept: func(_ context.Context, _ uuid.UUID, keep string) error {
+			revokedExcept = keep
+			return nil
+		},
+	})
+
+	require.NoError(t, svc.ChangePassword(context.Background(), application.ChangePasswordInput{
+		UserID: uid, CurrentPassword: "S3cretPass!", NewPassword: "NewS3cret!",
+		KeepSessionID: "keep-me",
+	}))
+	assert.Equal(t, "keep-me", revokedExcept)
+}
+
+func TestChangePassword_RejectsWrongCurrent(t *testing.T) {
+	auths := &fakeAuthRepo{}
+	uid := uuid.New()
+	encoded, err := passwordsHash(t, "S3cretPass!")
+	require.NoError(t, err)
+
+	auths.On("FindForUser", mock.Anything, uid, domain.AuthProviderPassword).
+		Return(domain.AuthMethod{UserID: uid, Provider: domain.AuthProviderPassword, PasswordHash: &encoded}, nil)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: &fakeUserRepo{}, AuthMethods: auths,
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: &fakeResetRepo{}, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: time.Now,
+	})
+	err = svc.ChangePassword(context.Background(), application.ChangePasswordInput{
+		UserID: uid, CurrentPassword: "wrong", NewPassword: "NewS3cret!",
+	})
+	require.ErrorIs(t, err, domain.ErrInvalidCredentials)
+}
+
+func TestGetMe_ReturnsUser(t *testing.T) {
+	users := &fakeUserRepo{}
+	uid := uuid.New()
+	users.On("FindByID", mock.Anything, uid).
+		Return(domain.User{ID: uid, Email: "ana@example.com", Name: "Ana"}, nil)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: &fakeAuthRepo{},
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: &fakeResetRepo{}, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: time.Now,
+	})
+
+	got, err := svc.GetMe(context.Background(), uid)
+	require.NoError(t, err)
+	assert.Equal(t, "ana@example.com", got.Email)
+}
+
+func TestUpdateProfile_UpdatesNameOnly(t *testing.T) {
+	users := &fakeUserRepo{}
+	uid := uuid.New()
+	users.On("UpdateName", mock.Anything, uid, "Ana Lima").
+		Return(domain.User{ID: uid, Name: "Ana Lima"}, nil)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: &fakeAuthRepo{},
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: &fakeResetRepo{}, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: time.Now,
+	})
+
+	got, err := svc.UpdateProfile(context.Background(), application.UpdateProfileInput{
+		UserID: uid, Name: "Ana Lima",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "Ana Lima", got.Name)
+}

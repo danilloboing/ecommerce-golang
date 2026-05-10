@@ -337,3 +337,65 @@ func (s *IdentityService) ConfirmPasswordReset(ctx context.Context, rawToken, ne
 	}
 	return nil
 }
+
+// ChangePasswordInput carries change-password parameters.
+type ChangePasswordInput struct {
+	UserID          uuid.UUID
+	CurrentPassword string
+	NewPassword     string
+	KeepSessionID   string // current session id; revoked-except pivot
+}
+
+// ChangePassword verifies the current password, sets the new one, and revokes
+// every session for this user EXCEPT KeepSessionID.
+func (s *IdentityService) ChangePassword(ctx context.Context, in ChangePasswordInput) error {
+	if err := validatePassword(in.NewPassword); err != nil {
+		return err
+	}
+	auth, err := s.deps.AuthMethods.FindForUser(ctx, in.UserID, domain.AuthProviderPassword)
+	if errors.Is(err, domain.ErrUserNotFound) || auth.PasswordHash == nil {
+		return domain.ErrInvalidCredentials
+	}
+	if err != nil {
+		return fmt.Errorf("identity: lookup auth method: %w", err)
+	}
+
+	ok, err := passwords.Verify(in.CurrentPassword, *auth.PasswordHash)
+	if err != nil {
+		return fmt.Errorf("identity: verify current password: %w", err)
+	}
+	if !ok {
+		return domain.ErrInvalidCredentials
+	}
+
+	encoded, err := passwords.Hash(in.NewPassword)
+	if err != nil {
+		return fmt.Errorf("identity: hash new password: %w", err)
+	}
+	if err := s.deps.AuthMethods.UpdatePassword(ctx, in.UserID, encoded); err != nil {
+		return fmt.Errorf("identity: update password: %w", err)
+	}
+	if err := s.deps.RevokeAllSessionsExcept(ctx, in.UserID, in.KeepSessionID); err != nil {
+		return fmt.Errorf("identity: revoke other sessions: %w", err)
+	}
+	return nil
+}
+
+// GetMe returns the current user.
+func (s *IdentityService) GetMe(ctx context.Context, userID uuid.UUID) (domain.User, error) {
+	return s.deps.Users.FindByID(ctx, userID)
+}
+
+// UpdateProfileInput accepts editable fields.
+type UpdateProfileInput struct {
+	UserID uuid.UUID
+	Name   string
+}
+
+// UpdateProfile updates the user's name.
+func (s *IdentityService) UpdateProfile(ctx context.Context, in UpdateProfileInput) (domain.User, error) {
+	if strings.TrimSpace(in.Name) == "" {
+		return domain.User{}, fmt.Errorf("identity: %w: name required", errPolicyMisc)
+	}
+	return s.deps.Users.UpdateName(ctx, in.UserID, in.Name)
+}
