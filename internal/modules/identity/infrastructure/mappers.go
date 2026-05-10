@@ -34,6 +34,27 @@ func mapAuthMethod(row queries.AuthMethod) domain.AuthMethod {
 	}
 }
 
+func mapEmailVerifyToken(row queries.EmailVerifyToken) domain.EmailVerifyToken {
+	return domain.EmailVerifyToken{
+		TokenHash:  row.TokenHash,
+		UserID:     row.UserID,
+		Email:      row.Email,
+		ExpiresAt:  row.ExpiresAt,
+		ConsumedAt: row.ConsumedAt,
+		CreatedAt:  row.CreatedAt,
+	}
+}
+
+func mapPasswordResetToken(row queries.PasswordResetToken) domain.PasswordResetToken {
+	return domain.PasswordResetToken{
+		TokenHash:  row.TokenHash,
+		UserID:     row.UserID,
+		ExpiresAt:  row.ExpiresAt,
+		ConsumedAt: row.ConsumedAt,
+		CreatedAt:  row.CreatedAt,
+	}
+}
+
 // isUniqueViolation reports whether err is a Postgres unique-constraint
 // violation (SQLSTATE 23505).
 func isUniqueViolation(err error) bool {
