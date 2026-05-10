@@ -125,3 +125,54 @@ func validateEmail(e string) error {
 
 // uuid import marker (used by later methods); avoids "imported and not used" if Register is the only consumer.
 var _ = uuid.Nil
+
+// LoginInput is the login request payload.
+type LoginInput struct {
+	Email    string
+	Password string
+}
+
+// Login validates credentials and returns the user.
+// Returns ErrInvalidCredentials when email is unknown or password mismatches
+// (with constant-time defense), and ErrEmailNotVerified only after a successful
+// password match against an unverified user.
+func (s *IdentityService) Login(ctx context.Context, in LoginInput) (domain.User, error) {
+	user, err := s.deps.Users.FindByEmail(ctx, in.Email)
+	if errors.Is(err, domain.ErrUserNotFound) {
+		// Constant-time defense: pretend we have a hash to verify against, then fail.
+		_, _ = passwords.Verify(in.Password, passwords.DummyHash)
+		return domain.User{}, domain.ErrInvalidCredentials
+	}
+	if err != nil {
+		return domain.User{}, fmt.Errorf("identity: lookup user: %w", err)
+	}
+
+	auth, err := s.deps.AuthMethods.FindForUser(ctx, user.ID, domain.AuthProviderPassword)
+	if errors.Is(err, domain.ErrUserNotFound) || auth.PasswordHash == nil {
+		_, _ = passwords.Verify(in.Password, passwords.DummyHash)
+		return domain.User{}, domain.ErrInvalidCredentials
+	}
+	if err != nil {
+		return domain.User{}, fmt.Errorf("identity: lookup auth method: %w", err)
+	}
+
+	ok, err := passwords.Verify(in.Password, *auth.PasswordHash)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("identity: verify password: %w", err)
+	}
+	if !ok {
+		return domain.User{}, domain.ErrInvalidCredentials
+	}
+
+	// Best-effort last-used touch; do not fail login on this.
+	_ = s.deps.AuthMethods.TouchLastUsed(ctx, auth.ID)
+
+	if !user.IsEmailVerified() {
+		return domain.User{}, domain.ErrEmailNotVerified
+	}
+	if !user.IsActive() {
+		return domain.User{}, domain.ErrInvalidCredentials
+	}
+
+	return user, nil
+}

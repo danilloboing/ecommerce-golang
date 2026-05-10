@@ -8,11 +8,14 @@ import (
 	"github.com/danilloboing/marketplace-golang/internal/modules/identity/application"
 	"github.com/danilloboing/marketplace-golang/internal/modules/identity/domain"
 	"github.com/danilloboing/marketplace-golang/internal/platform/email"
+	pw "github.com/danilloboing/marketplace-golang/internal/platform/passwords"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+var passwordsHashFn = pw.Hash
 
 // --- mocks ---
 
@@ -166,4 +169,117 @@ func TestRegister_PropagatesEmailDuplicate(t *testing.T) {
 		Email: "ana@example.com", Password: "S3cretPass!", Name: "Ana",
 	})
 	require.ErrorIs(t, err, domain.ErrEmailAlreadyTaken)
+}
+
+func TestLogin_ReturnsInvalidCredentialsWhenUserMissing(t *testing.T) {
+	users := &fakeUserRepo{}
+	users.On("FindByEmail", mock.Anything, "missing@example.com").
+		Return(domain.User{}, domain.ErrUserNotFound)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: &fakeAuthRepo{},
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: &fakeResetRepo{}, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: time.Now,
+	})
+
+	_, err := svc.Login(context.Background(), application.LoginInput{
+		Email: "missing@example.com", Password: "S3cretPass!",
+	})
+	require.ErrorIs(t, err, domain.ErrInvalidCredentials)
+}
+
+func TestLogin_ReturnsInvalidCredentialsWhenPasswordWrong(t *testing.T) {
+	users := &fakeUserRepo{}
+	auths := &fakeAuthRepo{}
+
+	uid := uuid.New()
+	users.On("FindByEmail", mock.Anything, "ana@example.com").
+		Return(domain.User{
+			ID: uid, Email: "ana@example.com", Name: "Ana",
+			EmailVerifiedAt: ptrTimeNow(), Status: domain.UserStatusActive,
+		}, nil)
+
+	encoded, err := passwordsHash(t, "real-password")
+	require.NoError(t, err)
+	auths.On("FindForUser", mock.Anything, uid, domain.AuthProviderPassword).
+		Return(domain.AuthMethod{ID: uuid.New(), UserID: uid, Provider: domain.AuthProviderPassword, PasswordHash: &encoded}, nil)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: auths,
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: &fakeResetRepo{}, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: time.Now,
+	})
+
+	_, err = svc.Login(context.Background(), application.LoginInput{
+		Email: "ana@example.com", Password: "wrong-password",
+	})
+	require.ErrorIs(t, err, domain.ErrInvalidCredentials)
+}
+
+func TestLogin_ReturnsEmailNotVerifiedWhenUnverified(t *testing.T) {
+	users := &fakeUserRepo{}
+	auths := &fakeAuthRepo{}
+	uid := uuid.New()
+	encoded, err := passwordsHash(t, "S3cretPass!")
+	require.NoError(t, err)
+
+	users.On("FindByEmail", mock.Anything, "ana@example.com").
+		Return(domain.User{ID: uid, Email: "ana@example.com", Status: domain.UserStatusActive}, nil)
+	auths.On("FindForUser", mock.Anything, uid, domain.AuthProviderPassword).
+		Return(domain.AuthMethod{ID: uuid.New(), UserID: uid, Provider: domain.AuthProviderPassword, PasswordHash: &encoded}, nil)
+	auths.On("TouchLastUsed", mock.Anything, mock.Anything).Return(nil)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: auths,
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: &fakeResetRepo{}, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: time.Now,
+	})
+
+	_, err = svc.Login(context.Background(), application.LoginInput{
+		Email: "ana@example.com", Password: "S3cretPass!",
+	})
+	require.ErrorIs(t, err, domain.ErrEmailNotVerified)
+}
+
+func TestLogin_HappyPathReturnsUser(t *testing.T) {
+	users := &fakeUserRepo{}
+	auths := &fakeAuthRepo{}
+	uid := uuid.New()
+	encoded, err := passwordsHash(t, "S3cretPass!")
+	require.NoError(t, err)
+
+	users.On("FindByEmail", mock.Anything, "ana@example.com").
+		Return(domain.User{
+			ID: uid, Email: "ana@example.com", Name: "Ana",
+			EmailVerifiedAt: ptrTimeNow(), Status: domain.UserStatusActive,
+		}, nil)
+	auths.On("FindForUser", mock.Anything, uid, domain.AuthProviderPassword).
+		Return(domain.AuthMethod{ID: uuid.New(), UserID: uid, Provider: domain.AuthProviderPassword, PasswordHash: &encoded}, nil)
+	auths.On("TouchLastUsed", mock.Anything, mock.Anything).Return(nil)
+
+	svc := application.NewIdentityService(application.IdentityServiceDeps{
+		Users: users, AuthMethods: auths,
+		VerifyTokens: &fakeVerifyRepo{}, ResetTokens: &fakeResetRepo{}, Email: &fakeSender{},
+		VerifyLinkBaseURL: "https://app/verify", ResetLinkBaseURL: "https://app/reset",
+		Now: time.Now,
+	})
+
+	u, err := svc.Login(context.Background(), application.LoginInput{
+		Email: "ana@example.com", Password: "S3cretPass!",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uid, u.ID)
+}
+
+func passwordsHash(t *testing.T, plain string) (string, error) {
+	t.Helper()
+	return passwordsHashFn(plain)
+}
+
+func ptrTimeNow() *time.Time {
+	t := time.Now().UTC()
+	return &t
 }
