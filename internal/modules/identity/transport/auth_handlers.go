@@ -253,4 +253,3 @@ func clearCookie(w http.ResponseWriter, name string) {
 var _ = uuid.Nil
 var _ = errors.Is
 var _ domain.UserStatus = ""
-

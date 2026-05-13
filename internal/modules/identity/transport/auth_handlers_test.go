@@ -100,7 +100,9 @@ type memVerifyRepo struct {
 	byHash map[string]domain.EmailVerifyToken
 }
 
-func newMemVerifyRepo() *memVerifyRepo { return &memVerifyRepo{byHash: map[string]domain.EmailVerifyToken{}} }
+func newMemVerifyRepo() *memVerifyRepo {
+	return &memVerifyRepo{byHash: map[string]domain.EmailVerifyToken{}}
+}
 func (r *memVerifyRepo) Insert(_ context.Context, h []byte, uid uuid.UUID, e string, exp time.Time) error {
 	r.byHash[string(h)] = domain.EmailVerifyToken{
 		TokenHash: h, UserID: uid, Email: e, ExpiresAt: exp,
