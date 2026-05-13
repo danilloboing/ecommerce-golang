@@ -7,16 +7,24 @@ import (
 	"github.com/danilloboing/marketplace-golang/internal/core/responsex"
 )
 
-// CookieName is the cookie carrying the session id. The Cookies.SecurePrefix
-// flag in config controls whether `__Secure-` is prepended at write time.
-const CookieName = "session_id"
+// DefaultCookieName is the default session cookie name. Callers SHOULD pass an
+// explicit name via Middleware so the value matches what the handlers write
+// (production with COOKIES_SECURE_PREFIX=true uses `__Secure-session_id`).
+const DefaultCookieName = "session_id"
 
-// Middleware reads the session_id cookie, looks up the session, refreshes its
-// activity timestamp, and injects Session into the request context.
-func Middleware(mgr Manager) func(http.Handler) http.Handler {
+// CookieName is kept as an alias for backward-compatibility and tests.
+const CookieName = DefaultCookieName
+
+// Middleware reads the session cookie (cookieName, falling back to DefaultCookieName
+// when empty), looks up the session, refreshes its activity timestamp, and injects
+// Session into the request context.
+func Middleware(mgr Manager, cookieName string) func(http.Handler) http.Handler {
+	if cookieName == "" {
+		cookieName = DefaultCookieName
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cookie, err := r.Cookie(CookieName)
+			cookie, err := r.Cookie(cookieName)
 			if err != nil || cookie.Value == "" {
 				responsex.Error(w, r, http.StatusUnauthorized, "unauthenticated", "authentication required")
 				return
@@ -25,7 +33,7 @@ func Middleware(mgr Manager) func(http.Handler) http.Handler {
 			sess, err := mgr.Get(r.Context(), cookie.Value)
 			switch {
 			case errors.Is(err, ErrNotFound), errors.Is(err, ErrExpired):
-				clearCookie(w, CookieName)
+				clearCookie(w, cookieName)
 				responsex.Error(w, r, http.StatusUnauthorized, "unauthenticated", "authentication required")
 				return
 			case err != nil:

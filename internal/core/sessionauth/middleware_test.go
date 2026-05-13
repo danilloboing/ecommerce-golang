@@ -45,7 +45,7 @@ func TestMiddleware_AttachesSessionWhenCookieValid(t *testing.T) {
 	}}
 
 	called := false
-	handler := sessionauth.Middleware(mgr)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := sessionauth.Middleware(mgr, "")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
 		s, ok := sessionauth.SessionFromContext(r.Context())
 		require.True(t, ok)
@@ -66,7 +66,7 @@ func TestMiddleware_AttachesSessionWhenCookieValid(t *testing.T) {
 
 func TestMiddleware_Returns401WhenCookieMissing(t *testing.T) {
 	mgr := &stubManager{}
-	handler := sessionauth.Middleware(mgr)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := sessionauth.Middleware(mgr, "")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("inner should not run")
 	}))
 
@@ -79,7 +79,7 @@ func TestMiddleware_Returns401WhenCookieMissing(t *testing.T) {
 
 func TestMiddleware_Returns401WhenSessionNotFound(t *testing.T) {
 	mgr := &stubManager{getErr: sessionauth.ErrNotFound}
-	handler := sessionauth.Middleware(mgr)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := sessionauth.Middleware(mgr, "")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("inner should not run")
 	}))
 

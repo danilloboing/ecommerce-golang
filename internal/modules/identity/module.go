@@ -23,6 +23,7 @@ type Module struct {
 	auth     *transport.AuthHandlers
 	me       *transport.MeHandlers
 	sessions sessionauth.Manager
+	cookies  transport.CookieConfig
 	csrfCfg  csrf.Config
 	rl       func(http.Handler) http.Handler
 }
@@ -62,6 +63,7 @@ func New(d Deps) *Module {
 		auth:     transport.NewAuthHandlers(svc, d.Sessions, d.Cookies),
 		me:       transport.NewMeHandlers(svc, d.Sessions, d.Cookies),
 		sessions: d.Sessions,
+		cookies:  d.Cookies,
 		csrfCfg:  d.CSRFCfg,
 	}
 }
@@ -82,7 +84,7 @@ func (m *Module) Mount(r chi.Router) {
 	})
 
 	r.Group(func(auth chi.Router) {
-		auth.Use(sessionauth.Middleware(m.sessions))
+		auth.Use(sessionauth.Middleware(m.sessions, m.cookies.SessionName))
 		auth.Use(csrf.Middleware(m.csrfCfg))
 		m.me.RegisterMeRoutes(auth)
 	})
