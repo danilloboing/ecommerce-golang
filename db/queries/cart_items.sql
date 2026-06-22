@@ -17,9 +17,7 @@ RETURNING *;
 SELECT * FROM cart_items WHERE cart_id = $1 ORDER BY added_at;
 
 -- name: GetCartItemByID :one
-SELECT ci.* FROM cart_items ci
-JOIN carts c ON c.id = ci.cart_id
-WHERE ci.id = $1 AND c.id = $2;
+SELECT * FROM cart_items WHERE id = $1 AND cart_id = $2;
 
 -- name: UpdateCartItemQuantity :one
 UPDATE cart_items SET quantity = $3, updated_at = now()
@@ -32,5 +30,5 @@ DELETE FROM cart_items WHERE id = $1 AND cart_id = $2;
 -- name: DeleteCartItemsByCart :exec
 DELETE FROM cart_items WHERE cart_id = $1;
 
--- name: CountActiveItems :one
+-- name: CountCartItems :one
 SELECT COUNT(*) FROM cart_items WHERE cart_id = $1;

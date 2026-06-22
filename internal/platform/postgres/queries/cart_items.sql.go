@@ -11,12 +11,12 @@ import (
 	"github.com/google/uuid"
 )
 
-const countActiveItems = `-- name: CountActiveItems :one
+const countCartItems = `-- name: CountCartItems :one
 SELECT COUNT(*) FROM cart_items WHERE cart_id = $1
 `
 
-func (q *Queries) CountActiveItems(ctx context.Context, cartID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countActiveItems, cartID)
+func (q *Queries) CountCartItems(ctx context.Context, cartID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countCartItems, cartID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -49,18 +49,16 @@ func (q *Queries) DeleteCartItemsByCart(ctx context.Context, cartID uuid.UUID) e
 }
 
 const getCartItemByID = `-- name: GetCartItemByID :one
-SELECT ci.id, ci.cart_id, ci.variant_id, ci.quantity, ci.unit_price_cents, ci.added_at, ci.updated_at FROM cart_items ci
-JOIN carts c ON c.id = ci.cart_id
-WHERE ci.id = $1 AND c.id = $2
+SELECT id, cart_id, variant_id, quantity, unit_price_cents, added_at, updated_at FROM cart_items WHERE id = $1 AND cart_id = $2
 `
 
 type GetCartItemByIDParams struct {
-	ID   uuid.UUID
-	ID_2 uuid.UUID
+	ID     uuid.UUID
+	CartID uuid.UUID
 }
 
 func (q *Queries) GetCartItemByID(ctx context.Context, arg GetCartItemByIDParams) (CartItem, error) {
-	row := q.db.QueryRow(ctx, getCartItemByID, arg.ID, arg.ID_2)
+	row := q.db.QueryRow(ctx, getCartItemByID, arg.ID, arg.CartID)
 	var i CartItem
 	err := row.Scan(
 		&i.ID,

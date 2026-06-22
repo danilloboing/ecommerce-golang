@@ -15,7 +15,7 @@ type Querier interface {
 	ClearDefaultAddress(ctx context.Context, userID uuid.UUID) error
 	ConsumeEmailVerifyToken(ctx context.Context, tokenHash []byte) error
 	ConsumePasswordResetToken(ctx context.Context, tokenHash []byte) error
-	CountActiveItems(ctx context.Context, cartID uuid.UUID) (int64, error)
+	CountCartItems(ctx context.Context, cartID uuid.UUID) (int64, error)
 	CreateAddress(ctx context.Context, arg CreateAddressParams) (Address, error)
 	CreateAnonCart(ctx context.Context, anonSessionID *string) (Cart, error)
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (CatalogCategory, error)
