@@ -24,6 +24,9 @@ type Config struct {
 	Cookies       Cookies
 	ViaCEP        ViaCEP
 	Cart          Cart
+	Checkout      Checkout
+	Payment       Payment
+	Shipping      Shipping
 }
 
 // App holds general application settings.
@@ -122,6 +125,24 @@ type ViaCEP struct {
 type Cart struct {
 	AbandonedAfter  time.Duration `env:"CART_ABANDONED_AFTER" envDefault:"168h"` // 7d
 	CleanupInterval time.Duration `env:"CART_CLEANUP_INTERVAL" envDefault:"6h"`
+}
+
+// Checkout configures the checkout flow timings.
+type Checkout struct {
+	QuoteTTL        time.Duration `env:"CHECKOUT_QUOTE_TTL" envDefault:"15m"`
+	ReservationTTL  time.Duration `env:"CHECKOUT_RESERVATION_TTL" envDefault:"30m"`
+	ReleaseInterval time.Duration `env:"CHECKOUT_RELEASE_INTERVAL" envDefault:"5m"`
+}
+
+// Payment configures the payment provider + webhook.
+type Payment struct {
+	Provider      string `env:"PAYMENT_PROVIDER" envDefault:"mock"`
+	WebhookSecret string `env:"MOCK_WEBHOOK_SECRET" envDefault:"dev-mock-secret"`
+}
+
+// Shipping configures the shipping provider.
+type Shipping struct {
+	Provider string `env:"SHIPPING_PROVIDER" envDefault:"mock"`
 }
 
 // Load parses configuration from environment variables.

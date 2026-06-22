@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 
 	"github.com/danilloboing/marketplace-golang/internal/config"
@@ -77,7 +78,7 @@ func run() error {
 		if !ok {
 			return fmt.Errorf("unknown category for product %s", p.slug)
 		}
-		_, err := admin.CreateProduct(ctx, application.CreateProductInput{
+		created, err := admin.CreateProduct(ctx, application.CreateProductInput{
 			Slug:           p.slug,
 			Name:           p.name,
 			Description:    p.description,
@@ -95,9 +96,23 @@ func run() error {
 			return fmt.Errorf("create product %s: %w", p.slug, err)
 		}
 		slog.Info("seeded product", "slug", p.slug)
+
+		for _, v := range created.Variants() {
+			if err := seedStock(ctx, pool, v.ID); err != nil {
+				return fmt.Errorf("seed stock for variant %s: %w", v.ID, err)
+			}
+		}
 	}
 
 	return nil
+}
+
+func seedStock(ctx context.Context, pool *pgxpool.Pool, variantID uuid.UUID) error {
+	_, err := pool.Exec(ctx,
+		`INSERT INTO inventory_stock (variant_id, available, reserved, version) VALUES ($1, 100, 0, 0) ON CONFLICT DO NOTHING`,
+		variantID,
+	)
+	return err
 }
 
 func categoryDefs() []categoryDef {

@@ -80,6 +80,19 @@ table below documents variables introduced per phase.
 
 The `cart_anon` cookie (HttpOnly, 30d) identifies anonymous carts and is cleared on login when its contents merge into the user cart.
 
+### Phase 3a — Checkout
+
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `PAYMENT_PROVIDER` | `mock` | no | Payment provider to use (`mock`; Pagar.me in 3b). |
+| `MOCK_WEBHOOK_SECRET` | `dev-mock-secret` | no | HMAC secret for signing/verifying mock payment webhook payloads. |
+| `SHIPPING_PROVIDER` | `mock` | no | Shipping quote provider to use (`mock`; MelhorEnvio later). |
+| `CHECKOUT_QUOTE_TTL` | `15m` | no | How long a checkout quote (locked prices) remains valid. |
+| `CHECKOUT_RESERVATION_TTL` | `30m` | no | How long inventory is reserved for a pending payment order. |
+| `CHECKOUT_RELEASE_INTERVAL` | `5m` | no | How often the worker sweeps expired reservations and releases locked inventory. |
+
+The `/payments/webhook` endpoint is HMAC-signed via the `X-Webhook-Signature` header. The reservation release job runs on the worker binary. Payment is mocked in Phase 3a (real Pagar.me integration in Phase 3b).
+
 ## Project structure
 
 See `docs/superpowers/specs/2026-05-08-marketplace-golang-design.md` section 3.

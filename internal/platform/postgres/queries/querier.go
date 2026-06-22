@@ -13,14 +13,21 @@ import (
 
 type Querier interface {
 	ClearDefaultAddress(ctx context.Context, userID uuid.UUID) error
+	CommitReservedStock(ctx context.Context, arg CommitReservedStockParams) error
 	ConsumeEmailVerifyToken(ctx context.Context, tokenHash []byte) error
 	ConsumePasswordResetToken(ctx context.Context, tokenHash []byte) error
 	CountCartItems(ctx context.Context, cartID uuid.UUID) (int64, error)
 	CreateAddress(ctx context.Context, arg CreateAddressParams) (Address, error)
 	CreateAnonCart(ctx context.Context, anonSessionID *string) (Cart, error)
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (CatalogCategory, error)
+	CreateCharge(ctx context.Context, arg CreateChargeParams) (Charge, error)
+	CreateCoupon(ctx context.Context, arg CreateCouponParams) (Coupon, error)
 	CreateImage(ctx context.Context, arg CreateImageParams) (CatalogImage, error)
+	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
+	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (CreateProductRow, error)
+	CreateQuote(ctx context.Context, arg CreateQuoteParams) (CheckoutQuote, error)
+	CreateReservation(ctx context.Context, arg CreateReservationParams) (StockReservation, error)
 	CreateUserCart(ctx context.Context, userID *uuid.UUID) (Cart, error)
 	CreateVariant(ctx context.Context, arg CreateVariantParams) (CatalogVariant, error)
 	DeleteAbandonedCarts(ctx context.Context, updatedAt time.Time) (int64, error)
@@ -45,26 +52,50 @@ type Querier interface {
 	GetCartItemByID(ctx context.Context, arg GetCartItemByIDParams) (CartItem, error)
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (CatalogCategory, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (CatalogCategory, error)
+	GetChargeByOrder(ctx context.Context, orderID uuid.UUID) (Charge, error)
+	GetChargeByProviderID(ctx context.Context, arg GetChargeByProviderIDParams) (Charge, error)
+	GetCouponByCode(ctx context.Context, code string) (Coupon, error)
+	GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyParams) (IdempotencyKey, error)
+	GetOrderByID(ctx context.Context, id uuid.UUID) (Order, error)
 	GetProductByID(ctx context.Context, id uuid.UUID) (GetProductByIDRow, error)
 	GetProductBySlug(ctx context.Context, slug string) (GetProductBySlugRow, error)
+	GetStock(ctx context.Context, variantID uuid.UUID) (InventoryStock, error)
+	GetUserOrderByID(ctx context.Context, arg GetUserOrderByIDParams) (Order, error)
+	GetUserQuote(ctx context.Context, arg GetUserQuoteParams) (CheckoutQuote, error)
 	GetVariantUnitPrice(ctx context.Context, id uuid.UUID) (int64, error)
+	HasPaidCharge(ctx context.Context, orderID uuid.UUID) (bool, error)
 	HealthCheck(ctx context.Context) (int32, error)
 	InsertAuthMethodPassword(ctx context.Context, arg InsertAuthMethodPasswordParams) (AuthMethod, error)
 	InsertEmailVerifyToken(ctx context.Context, arg InsertEmailVerifyTokenParams) error
 	InsertPasswordResetToken(ctx context.Context, arg InsertPasswordResetTokenParams) error
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
+	InsertWebhookEvent(ctx context.Context, arg InsertWebhookEventParams) (int64, error)
 	ListAddressesByUser(ctx context.Context, userID uuid.UUID) ([]Address, error)
 	ListAdminProducts(ctx context.Context, arg ListAdminProductsParams) ([]ListAdminProductsRow, error)
 	ListCartItems(ctx context.Context, cartID uuid.UUID) ([]CartItem, error)
 	ListCategories(ctx context.Context) ([]CatalogCategory, error)
+	ListExpiredHeldOrderIDs(ctx context.Context, expiresAt time.Time) ([]uuid.UUID, error)
 	ListImagesByProduct(ctx context.Context, productID uuid.UUID) ([]CatalogImage, error)
+	ListOrderItems(ctx context.Context, orderID uuid.UUID) ([]OrderItem, error)
+	ListOrdersByUser(ctx context.Context, arg ListOrdersByUserParams) ([]Order, error)
 	ListPublishedProducts(ctx context.Context, arg ListPublishedProductsParams) ([]ListPublishedProductsRow, error)
+	ListReservationsByOrder(ctx context.Context, orderID uuid.UUID) ([]StockReservation, error)
 	ListVariantsByProduct(ctx context.Context, productID uuid.UUID) ([]CatalogVariant, error)
 	MarkUserEmailVerified(ctx context.Context, id uuid.UUID) error
+	PutIdempotencyKey(ctx context.Context, arg PutIdempotencyKeyParams) error
+	RecordTransition(ctx context.Context, arg RecordTransitionParams) error
+	RedeemCoupon(ctx context.Context, code string) (Coupon, error)
+	ReleaseCoupon(ctx context.Context, code string) error
+	ReleaseReservedStock(ctx context.Context, arg ReleaseReservedStockParams) error
+	ReserveStock(ctx context.Context, arg ReserveStockParams) (InventoryStock, error)
 	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]SearchProductsRow, error)
 	SetCartStatus(ctx context.Context, arg SetCartStatusParams) error
+	SetChargeStatus(ctx context.Context, arg SetChargeStatusParams) error
 	SetDefaultAddress(ctx context.Context, arg SetDefaultAddressParams) (Address, error)
+	SetOrderStatus(ctx context.Context, arg SetOrderStatusParams) error
+	SetReservationStatus(ctx context.Context, arg SetReservationStatusParams) (int64, error)
 	TouchAuthMethodLastUsed(ctx context.Context, id uuid.UUID) error
+	TransitionOrderStatus(ctx context.Context, arg TransitionOrderStatusParams) (int64, error)
 	UpdateAddress(ctx context.Context, arg UpdateAddressParams) (Address, error)
 	UpdateAuthMethodPassword(ctx context.Context, arg UpdateAuthMethodPasswordParams) error
 	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (CartItem, error)
@@ -72,6 +103,7 @@ type Querier interface {
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (UpdateProductRow, error)
 	UpdateUserName(ctx context.Context, arg UpdateUserNameParams) (User, error)
 	UpsertCartItem(ctx context.Context, arg UpsertCartItemParams) (CartItem, error)
+	UpsertStock(ctx context.Context, arg UpsertStockParams) (InventoryStock, error)
 }
 
 var _ Querier = (*Queries)(nil)

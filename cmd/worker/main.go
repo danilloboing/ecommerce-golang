@@ -18,6 +18,7 @@ import (
 	"github.com/danilloboing/marketplace-golang/internal/core/observability"
 	cartjobs "github.com/danilloboing/marketplace-golang/internal/modules/cart/jobs"
 	"github.com/danilloboing/marketplace-golang/internal/modules/catalog/jobs"
+	inventoryjobs "github.com/danilloboing/marketplace-golang/internal/modules/inventory/jobs"
 	internalpostgres "github.com/danilloboing/marketplace-golang/internal/platform/postgres"
 	"github.com/danilloboing/marketplace-golang/internal/platform/queue"
 )
@@ -72,6 +73,11 @@ func run() error {
 		return fmt.Errorf("register cart cleanup worker: %w", err)
 	}
 
+	releaseExpired := inventoryjobs.NewReleaseExpiredReservationsWorker(pool)
+	if err := river.AddWorkerSafely(workers, releaseExpired); err != nil {
+		return fmt.Errorf("register release expired reservations worker: %w", err)
+	}
+
 	periodic := []*river.PeriodicJob{
 		river.NewPeriodicJob(
 			river.PeriodicInterval(24*time.Hour),
@@ -84,6 +90,13 @@ func run() error {
 			river.PeriodicInterval(cfg.Cart.CleanupInterval),
 			func() (river.JobArgs, *river.InsertOpts) {
 				return cartjobs.CleanupAbandonedCartsArgs{}, nil
+			},
+			&river.PeriodicJobOpts{RunOnStart: false},
+		),
+		river.NewPeriodicJob(
+			river.PeriodicInterval(cfg.Checkout.ReleaseInterval),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return inventoryjobs.ReleaseExpiredReservationsArgs{}, nil
 			},
 			&river.PeriodicJobOpts{RunOnStart: false},
 		),
