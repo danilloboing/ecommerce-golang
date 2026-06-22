@@ -370,6 +370,47 @@ func TestCheckoutService_Confirm_InsufficientStock(t *testing.T) {
 	}
 }
 
+// (e2) ConfirmTx returns ErrCouponUnavailable → propagated.
+func TestCheckoutService_Confirm_CouponUnavailable(t *testing.T) {
+	userID := uuid.New()
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	idem := &fakeIdempotency{hit: application.IdemHit{}}
+
+	variantA := uuid.New()
+	lines := []application.CartLine{{VariantID: variantA, Quantity: 1}}
+	cartReader := &fakeCartReader{view: application.CartView{Lines: lines}}
+	fp := computeTestFingerprint(lines)
+
+	q := makeQuote(userID, fp, now.Add(30*time.Minute))
+	quotesRepo := &fakeConfirmQuoteRepo{quote: q}
+
+	charge := application.ChargeView{ChargeID: uuid.New(), Amount: q.Total, Method: "pix"}
+	charger := &fakeCharger{view: charge}
+	confirmRepo := &fakeConfirmRepo{err: domain.ErrCouponUnavailable}
+
+	svc := buildConfirmService(t,
+		idem,
+		quotesRepo,
+		cartReader,
+		charger,
+		confirmRepo,
+		func() time.Time { return now },
+	)
+
+	in := application.ConfirmInput{
+		UserID:         userID,
+		QuoteID:        q.ID,
+		IdempotencyKey: "key-coupon-unavailable",
+		PaymentMethod:  "pix",
+	}
+
+	_, err := svc.Confirm(context.Background(), in)
+	if !errors.Is(err, domain.ErrCouponUnavailable) {
+		t.Fatalf("expected ErrCouponUnavailable, got %v", err)
+	}
+}
+
 // (f) Happy path → returns order + charge.
 func TestCheckoutService_Confirm_HappyPath(t *testing.T) {
 	userID := uuid.New()

@@ -108,9 +108,8 @@ type ConfirmPlan struct {
 	Cart                 CartView
 	Charge               ChargeView
 	IdempotencyKey       string
-	RequestHash          string
+	RequestHash          string // sha256 of quoteID — idempotency request fingerprint
 	ReservationExpiresAt time.Time
-	ResponseJSON         []byte
 }
 
 // IdemHit is the result of an idempotency key lookup.
@@ -174,6 +173,10 @@ type CouponValidator interface {
 // coupon redemption, order+items creation, cart conversion, and charge persist
 // all inside a single database transaction.
 type ConfirmRepository interface {
+	// ConfirmTx inserts the idempotency row, persisting its `response` column as
+	// the JSON-marshaled ConfirmResult{Order, Charge} built from the order it
+	// creates + the plan's Charge, so replays return the full result.
+	// (Task 18 implements this.)
 	ConfirmTx(ctx context.Context, plan ConfirmPlan) (orderingDomain.Order, error)
 }
 

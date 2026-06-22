@@ -75,15 +75,19 @@ func (f *fakeQuoteRepository) Create(_ context.Context, nq application.NewQuote)
 		return domain.Quote{}, f.err
 	}
 	q := domain.Quote{
-		ID:              uuid.New(),
-		UserID:          nq.UserID,
-		CartFingerprint: nq.CartFingerprint,
-		Subtotal:        nq.Subtotal,
-		Shipping:        nq.Shipping,
-		Discount:        nq.Discount,
-		Total:           nq.Total,
-		ExpiresAt:       nq.ExpiresAt,
-		CreatedAt:       time.Now(),
+		ID:               uuid.New(),
+		UserID:           nq.UserID,
+		CartFingerprint:  nq.CartFingerprint,
+		Lines:            nq.Lines,
+		CouponCode:       nq.CouponCode,
+		AddressSnapshot:  nq.AddressSnapshot,
+		ShippingSnapshot: nq.ShippingSnapshot,
+		Subtotal:         nq.Subtotal,
+		Shipping:         nq.Shipping,
+		Discount:         nq.Discount,
+		Total:            nq.Total,
+		ExpiresAt:        nq.ExpiresAt,
+		CreatedAt:        time.Now(),
 	}
 	f.created = append(f.created, q)
 	if f.byID == nil {

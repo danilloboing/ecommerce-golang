@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -216,7 +215,6 @@ func (s *CheckoutService) Confirm(ctx context.Context, in ConfirmInput) (Confirm
 		return ConfirmResult{}, err
 	}
 
-	responseJSON, _ := json.Marshal(ConfirmResult{Charge: charge})
 	order, err := s.confirmRepo.ConfirmTx(ctx, ConfirmPlan{
 		UserID:               in.UserID,
 		OrderID:              orderID,
@@ -226,7 +224,6 @@ func (s *CheckoutService) Confirm(ctx context.Context, in ConfirmInput) (Confirm
 		IdempotencyKey:       in.IdempotencyKey,
 		RequestHash:          reqHash,
 		ReservationExpiresAt: s.now().Add(s.reservationTTL),
-		ResponseJSON:         responseJSON,
 	})
 	if err != nil {
 		return ConfirmResult{}, err
