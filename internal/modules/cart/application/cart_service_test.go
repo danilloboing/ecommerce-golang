@@ -126,3 +126,14 @@ func TestCartService_Merge_Delegates(t *testing.T) {
 	require.NoError(t, svc.Merge(context.Background(), "anon123", uuid.New()))
 	assert.True(t, repo.mergeCalled)
 }
+
+func TestCartService_Clear_NoOpWhenNoCart(t *testing.T) {
+	svc := application.NewCartService(&fakeRepo{})
+	require.NoError(t, svc.Clear(context.Background(), anonOwner()))
+}
+
+func TestCartService_RemoveItem_NoCart(t *testing.T) {
+	svc := application.NewCartService(&fakeRepo{})
+	_, err := svc.RemoveItem(context.Background(), anonOwner(), uuid.New())
+	require.ErrorIs(t, err, domain.ErrCartNotFound)
+}
