@@ -4,6 +4,7 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -35,8 +36,8 @@ func (h *StockHandler) RegisterStockRoutes(r chi.Router) {
 }
 
 type setStockBody struct {
-	Available int `json:"available"`
-	Version   int `json:"version"`
+	Available *int `json:"available"`
+	Version   *int `json:"version"`
 }
 
 type stockResponse struct {
@@ -53,13 +54,29 @@ func (h *StockHandler) setStock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
 	var body setStockBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		responsex.Error(w, r, http.StatusBadRequest, "invalid_request", "invalid request body")
+	if err := dec.Decode(&body); err != nil {
+		responsex.Error(w, r, http.StatusBadRequest, "invalid_payload", "invalid request body")
 		return
 	}
 
-	stock, err := h.svc.SetStock(r.Context(), id, body.Available, body.Version)
+	if body.Available == nil {
+		responsex.Error(w, r, http.StatusBadRequest, "invalid_payload", "available is required")
+		return
+	}
+	if *body.Available < 0 || *body.Available > math.MaxInt32 {
+		responsex.Error(w, r, http.StatusUnprocessableEntity, "invalid_available", "available must be between 0 and 2147483647")
+		return
+	}
+	version := 0
+	if body.Version != nil {
+		version = *body.Version
+	}
+
+	stock, err := h.svc.SetStock(r.Context(), id, *body.Available, version)
 	if err != nil {
 		status, code, message := mapErrorToHTTP(err)
 		responsex.ErrorWithCause(w, r, status, code, message, err)
