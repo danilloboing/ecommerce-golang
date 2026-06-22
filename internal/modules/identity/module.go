@@ -2,9 +2,11 @@
 package identity
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
@@ -30,14 +32,16 @@ type Module struct {
 
 // Deps groups raw dependencies the module needs.
 type Deps struct {
-	Pool          *pgxpool.Pool
-	Redis         *redis.Client
-	Email         email.Sender
-	Sessions      sessionauth.Manager
-	Cookies       transport.CookieConfig
-	CSRFCfg       csrf.Config
-	RateLimitOpts ratelimit.Options
-	Cfg           config.Config
+	Pool           *pgxpool.Pool
+	Redis          *redis.Client
+	Email          email.Sender
+	Sessions       sessionauth.Manager
+	Cookies        transport.CookieConfig
+	CSRFCfg        csrf.Config
+	RateLimitOpts  ratelimit.Options
+	Cfg            config.Config
+	CartMerge      func(ctx context.Context, anonID string, userID uuid.UUID) error
+	CartCookieName string
 }
 
 // New builds the identity Module.
@@ -59,8 +63,11 @@ func New(d Deps) *Module {
 		RevokeAllSessionsExcept: d.Sessions.DeleteAllForUserExcept,
 	})
 
+	auth := transport.NewAuthHandlers(svc, d.Sessions, d.Cookies)
+	auth.SetCartMerge(d.CartMerge, d.CartCookieName)
+
 	return &Module{
-		auth:     transport.NewAuthHandlers(svc, d.Sessions, d.Cookies),
+		auth:     auth,
 		me:       transport.NewMeHandlers(svc, d.Sessions, d.Cookies),
 		sessions: d.Sessions,
 		cookies:  d.Cookies,

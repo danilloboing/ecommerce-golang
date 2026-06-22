@@ -1,10 +1,12 @@
 package transport
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -20,9 +22,11 @@ import (
 
 // AuthHandlers handles unauthenticated identity endpoints.
 type AuthHandlers struct {
-	svc      *application.IdentityService
-	sessions sessionauth.Manager
-	cookies  CookieConfig
+	svc            *application.IdentityService
+	sessions       sessionauth.Manager
+	cookies        CookieConfig
+	cartMerge      func(ctx context.Context, anonID string, userID uuid.UUID) error
+	cartCookieName string
 }
 
 // CookieConfig controls cookie names and flags written by handlers.
@@ -36,6 +40,30 @@ type CookieConfig struct {
 // NewAuthHandlers builds AuthHandlers.
 func NewAuthHandlers(svc *application.IdentityService, sessions sessionauth.Manager, cookies CookieConfig) *AuthHandlers {
 	return &AuthHandlers{svc: svc, sessions: sessions, cookies: cookies}
+}
+
+// SetCartMerge installs the optional cart-merge hook invoked on login.
+// Passing a nil fn (or empty cookie name) disables merging.
+func (h *AuthHandlers) SetCartMerge(fn func(ctx context.Context, anonID string, userID uuid.UUID) error, cookieName string) {
+	h.cartMerge = fn
+	h.cartCookieName = cookieName
+}
+
+// maybeMergeCart folds an anon cart into the just-authenticated user's cart.
+// Best-effort: a merge failure never blocks login.
+func (h *AuthHandlers) maybeMergeCart(w http.ResponseWriter, r *http.Request, userID uuid.UUID) {
+	if h.cartMerge == nil || h.cartCookieName == "" {
+		return
+	}
+	c, err := r.Cookie(h.cartCookieName)
+	if err != nil || c.Value == "" {
+		return
+	}
+	if err := h.cartMerge(r.Context(), c.Value, userID); err != nil {
+		slog.Default().Warn("cart merge on login failed", slog.String("error", err.Error()))
+		return
+	}
+	clearCookie(w, h.cartCookieName)
 }
 
 // RegisterAuthRoutes wires routes onto r.
@@ -105,6 +133,7 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.setSessionCookies(w, sess)
+	h.maybeMergeCart(w, r, user.ID)
 	responsex.JSON(w, http.StatusOK, userResponse(user))
 }
 
@@ -249,7 +278,6 @@ func clearCookie(w http.ResponseWriter, name string) {
 	})
 }
 
-// helper: keep the linter happy if uuid/errors are not yet referenced in early skeletons.
-var _ = uuid.Nil
+// helper: keep the linter happy if errors/domain are not yet referenced in early skeletons.
 var _ = errors.Is
 var _ domain.UserStatus = ""

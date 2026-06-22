@@ -14,6 +14,10 @@ tags:
     description: Authentication endpoints (register, login, verify, reset).
   - name: account
     description: Authenticated account-management endpoints (/me, sessions).
+  - name: cart
+    description: Shopping cart (anonymous or user)
+  - name: address
+    description: User shipping addresses and CEP lookup
 paths:
   /health:
     get:
@@ -434,6 +438,82 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "422": { $ref: "#/components/responses/Unprocessable" }
+  /cart:
+    get:
+      tags: [cart]
+      summary: Get current cart
+      responses:
+        '200': { description: Cart, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } }
+    delete:
+      tags: [cart]
+      summary: Clear cart
+      responses: { '204': { description: Cleared } }
+  /cart/items:
+    post:
+      tags: [cart]
+      summary: Add item (sets cart_anon cookie if anonymous)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [variant_id, quantity], properties: { variant_id: { type: string, format: uuid }, quantity: { type: integer, minimum: 1, maximum: 99 } } } } }
+      responses:
+        '200': { description: Cart, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } }
+        '404': { description: Variant not found }
+        '422': { description: Invalid quantity }
+  /cart/items/{id}:
+    patch:
+      tags: [cart]
+      summary: Update item quantity
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [quantity], properties: { quantity: { type: integer, minimum: 1, maximum: 99 } } } } }
+      responses:
+        '200': { description: Cart, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } }
+        '404': { description: Item not found }
+    delete:
+      tags: [cart]
+      summary: Remove item
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Cart, content: { application/json: { schema: { $ref: '#/components/schemas/Cart' } } } }
+        '404': { description: Item not found }
+  /address/cep/{cep}:
+    get:
+      tags: [address]
+      summary: Lookup address by CEP (cached)
+      parameters: [{ name: cep, in: path, required: true, schema: { type: string, pattern: '^[0-9]{8}$' } }]
+      responses:
+        '200': { description: Resolved address, content: { application/json: { schema: { $ref: '#/components/schemas/CEPResult' } } } }
+        '400': { description: Invalid CEP }
+        '404': { description: CEP not found }
+  /me/addresses:
+    get:
+      tags: [address]
+      summary: List addresses
+      responses: { '200': { description: Addresses, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Address' } } } } } }
+    post:
+      tags: [address]
+      summary: Create address
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AddressInput' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Address' } } } }, '422': { description: Invalid } }
+  /me/addresses/{id}:
+    patch:
+      tags: [address]
+      summary: Update address (partial)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AddressInput' } } } }
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Address' } } } }, '404': { description: Not found } }
+    delete:
+      tags: [address]
+      summary: Delete address
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '204': { description: Deleted }, '404': { description: Not found } }
+  /me/addresses/{id}/default:
+    post:
+      tags: [address]
+      summary: Set address as default
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Address' } } } }, '404': { description: Not found } }
 components:
   securitySchemes:
     bearerAuth:
@@ -647,3 +727,48 @@ components:
       properties:
         current_password: { type: string }
         new_password: { type: string, minLength: 8 }
+    CartItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        variant_id: { type: string, format: uuid }
+        quantity: { type: integer }
+        unit_price_cents: { type: integer, format: int64 }
+    Cart:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CartItem' } }
+        subtotal_cents: { type: integer, format: int64 }
+    Address:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        recipient_name: { type: string }
+        postal_code: { type: string }
+        street: { type: string }
+        number: { type: string }
+        complement: { type: string, nullable: true }
+        neighborhood: { type: string }
+        city: { type: string }
+        state: { type: string }
+        is_default: { type: boolean }
+    AddressInput:
+      type: object
+      properties:
+        recipient_name: { type: string }
+        postal_code: { type: string, pattern: '^[0-9]{8}$' }
+        street: { type: string }
+        number: { type: string }
+        complement: { type: string, nullable: true }
+        neighborhood: { type: string }
+        city: { type: string }
+        state: { type: string, minLength: 2, maxLength: 2 }
+        is_default: { type: boolean }
+    CEPResult:
+      type: object
+      properties:
+        postal_code: { type: string }
+        street: { type: string }
+        neighborhood: { type: string }
+        city: { type: string }
+        state: { type: string }

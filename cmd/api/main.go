@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/netip"
 	"os"
 	"os/signal"
@@ -24,6 +25,8 @@ import (
 	"github.com/danilloboing/marketplace-golang/internal/core/observability"
 	"github.com/danilloboing/marketplace-golang/internal/core/ratelimit"
 	"github.com/danilloboing/marketplace-golang/internal/core/sessionauth"
+	"github.com/danilloboing/marketplace-golang/internal/modules/address"
+	"github.com/danilloboing/marketplace-golang/internal/modules/cart"
 	"github.com/danilloboing/marketplace-golang/internal/modules/catalog"
 	"github.com/danilloboing/marketplace-golang/internal/modules/identity"
 	"github.com/danilloboing/marketplace-golang/internal/modules/identity/transport"
@@ -32,6 +35,7 @@ import (
 	internalpostgres "github.com/danilloboing/marketplace-golang/internal/platform/postgres"
 	internalredis "github.com/danilloboing/marketplace-golang/internal/platform/redis"
 	"github.com/danilloboing/marketplace-golang/internal/platform/storage/r2"
+	"github.com/danilloboing/marketplace-golang/internal/platform/viacep"
 )
 
 func main() {
@@ -185,6 +189,22 @@ func run() error {
 		return fmt.Errorf("api: parse trusted proxies: %w", err)
 	}
 
+	viacepClient := viacep.NewClient(
+		&http.Client{Timeout: cfg.ViaCEP.Timeout},
+		rdb,
+		cfg.ViaCEP.BaseURL,
+		cfg.ViaCEP.CacheTTL,
+	)
+
+	cartAnonCookie := cookieName("cart_anon", cfg.Cookies.SecurePrefix)
+
+	cartModule := cart.New(cart.Deps{
+		Pool:           pool,
+		Sessions:       sessions,
+		SessionCookie:  cookies.SessionName,
+		AnonCookieName: cartAnonCookie,
+	})
+
 	identityModule := identity.New(identity.Deps{
 		Pool:     pool,
 		Redis:    rdb,
@@ -196,9 +216,22 @@ func run() error {
 			Client:         rdb,
 			TrustedProxies: trustedProxies,
 		},
-		Cfg: cfg,
+		Cfg:            cfg,
+		CartMerge:      cartModule.Merger(),
+		CartCookieName: cartModule.AnonCookieName(),
 	})
+
+	addressModule := address.New(address.Deps{
+		Pool:          pool,
+		Sessions:      sessions,
+		SessionCookie: cookies.SessionName,
+		CSRFCfg:       csrfCfg,
+		ViaCEP:        viacepClient,
+	})
+
 	identityModule.Mount(router)
+	cartModule.Mount(router)
+	addressModule.Mount(router)
 
 	srv := httpx.NewServer(httpx.ServerOptions{
 		Addr:            fmt.Sprintf(":%d", cfg.App.Port),

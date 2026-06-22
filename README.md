@@ -68,6 +68,18 @@ table below documents variables introduced per phase.
 | `RATELIMIT_TRUSTED_PROXIES` | (empty) | no | Comma-separated CIDRs whose `X-Forwarded-For` is trusted. |
 | `COOKIES_SECURE_PREFIX` | `false` | no | Set to `true` in production behind HTTPS to enable `__Secure-` cookie name prefix. |
 
+### Phase 2b — Commerce
+
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `VIACEP_BASE_URL` | `https://viacep.com.br/ws` | no | ViaCEP API base (no trailing slash). |
+| `VIACEP_TIMEOUT` | `3s` | no | Per-request timeout for CEP lookups. |
+| `VIACEP_CACHE_TTL` | `1h` | no | Redis cache TTL for resolved CEPs. |
+| `CART_ABANDONED_AFTER` | `168h` (7d) | no | Idle period after which an anonymous cart is marked abandoned. |
+| `CART_CLEANUP_INTERVAL` | `6h` | no | How often the worker runs the abandoned-cart sweep. |
+
+The `cart_anon` cookie (HttpOnly, 30d) identifies anonymous carts and is cleared on login when its contents merge into the user cart.
+
 ## Project structure
 
 See `docs/superpowers/specs/2026-05-08-marketplace-golang-design.md` section 3.

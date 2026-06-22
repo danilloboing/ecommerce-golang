@@ -16,6 +16,7 @@ import (
 
 	"github.com/danilloboing/marketplace-golang/internal/config"
 	"github.com/danilloboing/marketplace-golang/internal/core/observability"
+	cartjobs "github.com/danilloboing/marketplace-golang/internal/modules/cart/jobs"
 	"github.com/danilloboing/marketplace-golang/internal/modules/catalog/jobs"
 	internalpostgres "github.com/danilloboing/marketplace-golang/internal/platform/postgres"
 	"github.com/danilloboing/marketplace-golang/internal/platform/queue"
@@ -66,6 +67,11 @@ func run() error {
 		return fmt.Errorf("register cleanup worker: %w", err)
 	}
 
+	cartCleanup := cartjobs.NewCleanupAbandonedCartsWorker(pool, cfg.Cart.AbandonedAfter)
+	if err := river.AddWorkerSafely(workers, cartCleanup); err != nil {
+		return fmt.Errorf("register cart cleanup worker: %w", err)
+	}
+
 	periodic := []*river.PeriodicJob{
 		river.NewPeriodicJob(
 			river.PeriodicInterval(24*time.Hour),
@@ -73,6 +79,13 @@ func run() error {
 				return jobs.CleanupOrphansArgs{}, nil
 			},
 			&river.PeriodicJobOpts{RunOnStart: true},
+		),
+		river.NewPeriodicJob(
+			river.PeriodicInterval(cfg.Cart.CleanupInterval),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return cartjobs.CleanupAbandonedCartsArgs{}, nil
+			},
+			&river.PeriodicJobOpts{RunOnStart: false},
 		),
 	}
 
