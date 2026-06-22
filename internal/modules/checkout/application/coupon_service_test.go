@@ -23,8 +23,8 @@ func (f *fakeCouponRepo) GetByCode(_ context.Context, code string) (*domain.Coup
 	return c, nil
 }
 
-func (f *fakeCouponRepo) Redeem(_ context.Context, couponID, userID string) error { return nil }
-func (f *fakeCouponRepo) Release(_ context.Context, couponID, userID string) error { return nil }
+func (f *fakeCouponRepo) Redeem(_ context.Context, code string) error { return nil }
+func (f *fakeCouponRepo) Release(_ context.Context, code string) error { return nil }
 func (f *fakeCouponRepo) Create(_ context.Context, in application.NewCoupon) (*domain.Coupon, error) {
 	c := &domain.Coupon{
 		Code:          in.Code,
