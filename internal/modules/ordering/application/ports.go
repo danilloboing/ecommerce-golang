@@ -16,6 +16,7 @@ type OrderRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.Order, error)
 	GetUserOrder(ctx context.Context, id, userID uuid.UUID) (domain.Order, error)
 	ListByUser(ctx context.Context, userID uuid.UUID, limit int) ([]domain.Order, error)
+	CreateItem(ctx context.Context, orderID uuid.UUID, item NewOrderItem) (domain.OrderItem, error)
 	ListItems(ctx context.Context, orderID uuid.UUID) ([]domain.OrderItem, error)
 }
 

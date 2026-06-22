@@ -64,6 +64,19 @@ func (f *fakeOrderRepo) ListByUser(_ context.Context, userID uuid.UUID, limit in
 	return result, nil
 }
 
+func (f *fakeOrderRepo) CreateItem(_ context.Context, orderID uuid.UUID, item application.NewOrderItem) (domain.OrderItem, error) {
+	out := domain.OrderItem{
+		ID:        uuid.New(),
+		OrderID:   orderID,
+		VariantID: item.VariantID,
+		Quantity:  item.Quantity,
+		UnitPrice: item.UnitPriceCents,
+		Snapshot:  item.ProductSnapshot,
+	}
+	f.items[orderID] = append(f.items[orderID], out)
+	return out, nil
+}
+
 func (f *fakeOrderRepo) ListItems(_ context.Context, orderID uuid.UUID) ([]domain.OrderItem, error) {
 	items, ok := f.items[orderID]
 	if !ok {
