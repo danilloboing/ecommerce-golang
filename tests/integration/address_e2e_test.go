@@ -23,9 +23,11 @@ func authedAddressReq(t *testing.T, method, url, body string, cookies []*http.Co
 		r, err = http.NewRequest(method, url, nil)
 	} else {
 		r, err = http.NewRequest(method, url, strings.NewReader(body))
-		r.Header.Set("Content-Type", "application/json")
 	}
 	require.NoError(t, err)
+	if body != "" {
+		r.Header.Set("Content-Type", "application/json")
+	}
 	for _, c := range cookies {
 		r.AddCookie(c)
 		if c.Name == "csrf_token" {

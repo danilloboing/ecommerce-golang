@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -134,5 +133,4 @@ func TestCartE2E_VariantDeleteBlockedByFK(t *testing.T) {
 	_, err := env.pool.Exec(ctx, `DELETE FROM catalog_variants WHERE id = $1`, env.variantID)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "23503")
-	_ = uuid.Nil
 }
