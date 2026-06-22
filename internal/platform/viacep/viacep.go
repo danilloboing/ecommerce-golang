@@ -56,7 +56,7 @@ type viacepResponse struct {
 	Bairro      string `json:"bairro"`
 	Localidade  string `json:"localidade"`
 	UF          string `json:"uf"`
-	Erro        any    `json:"erro"`
+	Erro bool `json:"erro"`
 }
 
 // Lookup resolves cep (8 digits, no mask). Cache hit short-circuits the HTTP call.
@@ -73,8 +73,8 @@ func (c *Client) Lookup(ctx context.Context, cep string) (Address, error) {
 		}
 	}
 
-	url := fmt.Sprintf("%s/%s/json/", c.baseURL, cep)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	endpoint := fmt.Sprintf("%s/%s/json/", c.baseURL, cep)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return Address{}, fmt.Errorf("viacep: build request: %w", err)
 	}
@@ -92,7 +92,7 @@ func (c *Client) Lookup(ctx context.Context, cep string) (Address, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return Address{}, fmt.Errorf("viacep: decode: %w", err)
 	}
-	if body.Erro != nil && body.Erro != false {
+	if body.Erro {
 		return Address{}, ErrCEPNotFound
 	}
 
