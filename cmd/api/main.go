@@ -26,10 +26,18 @@ import (
 	"github.com/danilloboing/marketplace-golang/internal/core/ratelimit"
 	"github.com/danilloboing/marketplace-golang/internal/core/sessionauth"
 	"github.com/danilloboing/marketplace-golang/internal/modules/address"
+	addressinfra "github.com/danilloboing/marketplace-golang/internal/modules/address/infrastructure"
 	"github.com/danilloboing/marketplace-golang/internal/modules/cart"
 	"github.com/danilloboing/marketplace-golang/internal/modules/catalog"
+	"github.com/danilloboing/marketplace-golang/internal/modules/checkout"
+	checkoutinfra "github.com/danilloboing/marketplace-golang/internal/modules/checkout/infrastructure"
 	"github.com/danilloboing/marketplace-golang/internal/modules/identity"
 	"github.com/danilloboing/marketplace-golang/internal/modules/identity/transport"
+	"github.com/danilloboing/marketplace-golang/internal/modules/inventory"
+	"github.com/danilloboing/marketplace-golang/internal/modules/ordering"
+	"github.com/danilloboing/marketplace-golang/internal/modules/payment"
+	payinfra "github.com/danilloboing/marketplace-golang/internal/modules/payment/infrastructure"
+	"github.com/danilloboing/marketplace-golang/internal/modules/shipping"
 	"github.com/danilloboing/marketplace-golang/internal/platform/email"
 	imagex "github.com/danilloboing/marketplace-golang/internal/platform/image"
 	internalpostgres "github.com/danilloboing/marketplace-golang/internal/platform/postgres"
@@ -66,6 +74,15 @@ func parseCIDRs(raw []string) ([]netip.Prefix, error) {
 		out = append(out, p)
 	}
 	return out, nil
+}
+
+func newPaymentProvider(cfg config.Payment) *payinfra.MockProvider {
+	switch cfg.Provider {
+	case "mock":
+		return payinfra.NewMockProvider(cfg.WebhookSecret)
+	default:
+		panic(fmt.Sprintf("unsupported payment provider %q (pagarme lands in 3b)", cfg.Provider))
+	}
 }
 
 func run() error {
@@ -229,9 +246,48 @@ func run() error {
 		ViaCEP:        viacepClient,
 	})
 
+	inventoryModule := inventory.New(inventory.Deps{
+		Pool:       pool,
+		AdminToken: cfg.Admin.APIToken,
+	})
+
+	orderingModule := ordering.New(ordering.Deps{
+		Pool:          pool,
+		Sessions:      sessions,
+		SessionCookie: cookies.SessionName,
+	})
+
+	shippingModule := shipping.New(shipping.Deps{
+		Provider: cfg.Shipping.Provider,
+	})
+
+	paymentProvider := newPaymentProvider(cfg.Payment)
+	paymentModule := payment.New(payment.Deps{
+		Pool:     pool,
+		Provider: paymentProvider,
+	})
+
+	checkoutModule := checkout.New(checkout.Deps{
+		Pool:          pool,
+		Sessions:      sessions,
+		SessionCookie: cookies.SessionName,
+		CSRFCfg:       csrfCfg,
+		AdminToken:    cfg.Admin.APIToken,
+		Address:       addressinfra.New(pool),
+		Shipping:      shippingModule.Service(),
+		Charger:       checkoutinfra.NewMockCharger(),
+		Cfg:           cfg.Checkout,
+	})
+
+	paymentModule.SetApplier(checkoutModule.Reconciler())
+
 	identityModule.Mount(router)
 	cartModule.Mount(router)
 	addressModule.Mount(router)
+	inventoryModule.Mount(router)
+	orderingModule.Mount(router)
+	paymentModule.Mount(router)
+	checkoutModule.Mount(router)
 
 	srv := httpx.NewServer(httpx.ServerOptions{
 		Addr:            fmt.Sprintf(":%d", cfg.App.Port),
