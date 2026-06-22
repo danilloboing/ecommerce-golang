@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 
@@ -22,7 +23,7 @@ func NewCartService(repo CartRepository) *CartService {
 func (s *CartService) Get(ctx context.Context, owner domain.Owner) (domain.Cart, error) {
 	cart, err := s.repo.FindActive(ctx, owner)
 	if err != nil {
-		if err == domain.ErrCartNotFound {
+		if errors.Is(err, domain.ErrCartNotFound) {
 			return domain.Cart{}, nil
 		}
 		return domain.Cart{}, err
@@ -81,7 +82,7 @@ func (s *CartService) RemoveItem(ctx context.Context, owner domain.Owner, itemID
 func (s *CartService) Clear(ctx context.Context, owner domain.Owner) error {
 	cart, err := s.repo.FindActive(ctx, owner)
 	if err != nil {
-		if err == domain.ErrCartNotFound {
+		if errors.Is(err, domain.ErrCartNotFound) {
 			return nil
 		}
 		return err

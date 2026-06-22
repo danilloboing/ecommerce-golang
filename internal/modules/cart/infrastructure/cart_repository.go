@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/danilloboing/marketplace-golang/internal/modules/cart/application"
@@ -126,8 +127,27 @@ func (r *Repository) ClearItems(ctx context.Context, cartID uuid.UUID) error {
 	return nil
 }
 
-// Merge folds the anon cart into the user's active cart in one transaction.
+// Merge folds the anon cart into the user's active cart. It retries once if a
+// concurrent user-cart create trips carts_user_active_uniq (23505), since a
+// poisoned tx must be restarted, not continued.
 func (r *Repository) Merge(ctx context.Context, anonID string, userID uuid.UUID) error {
+	const maxAttempts = 2
+	var err error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		err = r.mergeOnce(ctx, anonID, userID)
+		if err == nil || !isUniqueViolation(err) {
+			return err
+		}
+	}
+	return err
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+func (r *Repository) mergeOnce(ctx context.Context, anonID string, userID uuid.UUID) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("cart repo: begin tx: %w", err)
