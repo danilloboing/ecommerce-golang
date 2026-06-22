@@ -32,7 +32,7 @@ func (r *Repository) Create(ctx context.Context, c domain.Charge) (domain.Charge
 		ProviderChargeID: c.ProviderChargeID,
 		Method:           c.Method,
 		AmountCents:      c.AmountCents,
-		RawPayload:       []byte("{}"),
+		RawPayload:       []byte("{}"), // TODO(task-20): store the real provider payload
 	})
 	if err != nil {
 		return domain.Charge{}, fmt.Errorf("charge repo: create: %w", err)

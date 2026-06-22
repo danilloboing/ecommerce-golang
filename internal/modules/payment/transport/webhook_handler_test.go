@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/danilloboing/marketplace-golang/internal/modules/payment/application"
 	"github.com/danilloboing/marketplace-golang/internal/modules/payment/domain"
 	"github.com/danilloboing/marketplace-golang/internal/modules/payment/infrastructure"
 	"github.com/danilloboing/marketplace-golang/internal/modules/payment/transport"
@@ -51,5 +50,13 @@ func TestWebhook_SignatureGate(t *testing.T) {
 	resp.Body.Close()
 	assert.True(t, applier.called)
 	assert.Equal(t, "paid", applier.ev.Type)
-	_ = application.ChargeRequest{}
+
+	// missing signature → 401, applier not called
+	applier.called = false
+	req, _ = http.NewRequest(http.MethodPost, srv.URL+"/payments/webhook", bytes.NewReader(body))
+	resp, err = http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	resp.Body.Close()
+	assert.False(t, applier.called)
 }

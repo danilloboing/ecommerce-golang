@@ -46,6 +46,11 @@ func (h *WebhookHandler) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.applier == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+		return
+	}
+
 	if err := h.applier.Apply(r.Context(), ev); err != nil {
 		slog.Error("webhook apply failed", "error", err.Error())
 		http.Error(w, `{"error":"internal_error"}`, http.StatusInternalServerError)
