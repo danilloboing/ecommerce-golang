@@ -3,6 +3,8 @@ package transport_test
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/danilloboing/marketplace-golang/internal/core/observability"
 	"github.com/danilloboing/marketplace-golang/internal/core/sessionauth"
 	"github.com/danilloboing/marketplace-golang/internal/modules/ordering/domain"
 	"github.com/danilloboing/marketplace-golang/internal/modules/ordering/transport"
@@ -45,19 +48,14 @@ func withSession(s sessionauth.Session) func(http.Handler) http.Handler {
 	}
 }
 
-func newRouter(svc transport.OrderReader, useSession bool) chi.Router {
-	h := transport.NewOrderHandlers(svc)
-	r := chi.NewRouter()
-	r.Group(func(grp chi.Router) {
-		if useSession {
-			grp.Use(withSession(sessionauth.Session{
-				ID:     "sid",
-				UserID: uuid.New(),
-			}))
-		}
-		h.RegisterOrderRoutes(grp)
+// withDiscardLogger injects a no-op slog logger so that responsex.ErrorWithCause
+// does not emit WARN/ERROR lines to stderr during tests.
+func withDiscardLogger(next http.Handler) http.Handler {
+	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := observability.WithLogger(r.Context(), discard)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-	return r
 }
 
 // TestGetOrder_WithSession checks that GET /me/orders/{id} returns 200 with order JSON.
@@ -125,6 +123,7 @@ func TestGetOrder_NotFound(t *testing.T) {
 	h := transport.NewOrderHandlers(svc)
 	r := chi.NewRouter()
 	r.Group(func(grp chi.Router) {
+		grp.Use(withDiscardLogger)
 		grp.Use(withSession(sessionauth.Session{ID: "sid", UserID: uuid.New()}))
 		h.RegisterOrderRoutes(grp)
 	})
@@ -177,4 +176,21 @@ func TestListOrders(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Len(t, body, 2)
 	assert.Equal(t, int64(3500), body[0].Total)
+}
+
+// TestListOrders_ServiceError checks that GET /me/orders returns 500 when the service fails.
+func TestListOrders_ServiceError(t *testing.T) {
+	svc := &fakeOrderReader{listErr: context.DeadlineExceeded}
+	h := transport.NewOrderHandlers(svc)
+	r := chi.NewRouter()
+	r.Group(func(grp chi.Router) {
+		grp.Use(withDiscardLogger)
+		grp.Use(withSession(sessionauth.Session{ID: "sid", UserID: uuid.New()}))
+		h.RegisterOrderRoutes(grp)
+	})
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/me/orders", nil))
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }

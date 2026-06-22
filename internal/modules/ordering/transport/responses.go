@@ -24,19 +24,19 @@ type OrderItemResponse struct {
 
 // OrderResponse is the JSON shape for a full order (with items).
 type OrderResponse struct {
-	ID               uuid.UUID          `json:"id"`
-	UserID           uuid.UUID          `json:"user_id"`
-	Status           domain.OrderStatus `json:"status"`
-	Subtotal         int64              `json:"subtotal"`
-	Shipping         int64              `json:"shipping"`
-	Discount         int64              `json:"discount"`
-	Total            int64              `json:"total"`
-	CouponCode       *string            `json:"coupon_code,omitempty"`
-	AddressSnapshot  json.RawMessage    `json:"address_snapshot,omitempty"`
-	ShippingSnapshot json.RawMessage    `json:"shipping_snapshot,omitempty"`
+	ID               uuid.UUID           `json:"id"`
+	UserID           uuid.UUID           `json:"user_id"`
+	Status           domain.OrderStatus  `json:"status"`
+	Subtotal         int64               `json:"subtotal"`
+	Shipping         int64               `json:"shipping"`
+	Discount         int64               `json:"discount"`
+	Total            int64               `json:"total"`
+	CouponCode       *string             `json:"coupon_code,omitempty"`
+	AddressSnapshot  json.RawMessage     `json:"address_snapshot,omitempty"`
+	ShippingSnapshot json.RawMessage     `json:"shipping_snapshot,omitempty"`
 	Items            []OrderItemResponse `json:"items"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        time.Time          `json:"updated_at"`
+	CreatedAt        time.Time           `json:"created_at"`
+	UpdatedAt        time.Time           `json:"updated_at"`
 }
 
 // OrderListItem is the JSON shape for an order in a list (no items).
