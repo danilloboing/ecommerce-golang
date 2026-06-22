@@ -30,6 +30,7 @@ func TestLoad_ParsesAllFieldsFromEnv(t *testing.T) {
 	t.Setenv("STORAGE_SECRET_ACCESS_KEY", "sk")
 	t.Setenv("STORAGE_BUCKET", "marketplace")
 	t.Setenv("STORAGE_PUBLIC_BASE_URL", "https://cdn.example/marketplace")
+	setEmailEnv(t)
 
 	cfg, err := config.Load()
 
@@ -63,6 +64,12 @@ func setStorageEnv(t *testing.T) {
 	t.Setenv("STORAGE_SECRET_ACCESS_KEY", "sk")
 	t.Setenv("STORAGE_BUCKET", "marketplace")
 	t.Setenv("STORAGE_PUBLIC_BASE_URL", "https://cdn.example/marketplace")
+}
+
+func setEmailEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("EMAIL_VERIFY_LINK_BASE_URL", "https://app.example/verify")
+	t.Setenv("EMAIL_RESET_LINK_BASE_URL", "https://app.example/reset")
 }
 
 func TestLoad_RequiresDatabaseURL(t *testing.T) {
@@ -99,10 +106,37 @@ func TestLoad_RequiresStorageBucket(t *testing.T) {
 	assert.Contains(t, err.Error(), "STORAGE_BUCKET")
 }
 
+func TestLoad_RequiresEmailVerifyLinkBaseURL(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("ADMIN_API_TOKEN", "x")
+	setStorageEnv(t)
+	setEmailEnv(t)
+	t.Setenv("EMAIL_VERIFY_LINK_BASE_URL", "")
+
+	_, err := config.Load()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "EMAIL_VERIFY_LINK_BASE_URL")
+}
+
+func TestLoad_RequiresEmailResetLinkBaseURL(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("ADMIN_API_TOKEN", "x")
+	setStorageEnv(t)
+	setEmailEnv(t)
+	t.Setenv("EMAIL_RESET_LINK_BASE_URL", "")
+
+	_, err := config.Load()
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "EMAIL_RESET_LINK_BASE_URL")
+}
+
 func TestLoad_AppliesDefaults(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
 	t.Setenv("ADMIN_API_TOKEN", "x")
 	setStorageEnv(t)
+	setEmailEnv(t)
 
 	cfg, err := config.Load()
 
@@ -112,4 +146,68 @@ func TestLoad_AppliesDefaults(t *testing.T) {
 	assert.Equal(t, "info", cfg.App.LogLevel)
 	assert.Equal(t, 30*time.Second, cfg.App.ShutdownTimeout)
 	assert.Equal(t, 25, cfg.Database.MaxOpenConns)
+
+	assert.Equal(t, "log", cfg.Email.Provider)
+	assert.Equal(t, "no-reply@localhost", cfg.Email.FromAddress)
+	assert.Equal(t, "Loja", cfg.Email.FromName)
+
+	assert.Equal(t, 336*time.Hour, cfg.Session.TTLDefault)
+	assert.Equal(t, 720*time.Hour, cfg.Session.TTLRememberMe)
+	assert.Equal(t, 24*time.Hour, cfg.Session.RefreshAfter)
+
+	assert.Equal(t, []string{"http://localhost:3000"}, cfg.CSRF.AllowedOrigins)
+	assert.False(t, cfg.Cookies.SecurePrefix)
+
+	assert.Equal(t, "https://viacep.com.br/ws", cfg.ViaCEP.BaseURL)
+	assert.Equal(t, 3*time.Second, cfg.ViaCEP.Timeout)
+	assert.Equal(t, time.Hour, cfg.ViaCEP.CacheTTL)
+}
+
+func TestLoad_PopulatesEmailSessionsCSRFAndRateLimit(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("ADMIN_API_TOKEN", "abc")
+	t.Setenv("STORAGE_ENDPOINT", "http://localhost:9000")
+	t.Setenv("STORAGE_ACCESS_KEY_ID", "k")
+	t.Setenv("STORAGE_SECRET_ACCESS_KEY", "s")
+	t.Setenv("STORAGE_BUCKET", "b")
+	t.Setenv("STORAGE_PUBLIC_BASE_URL", "http://localhost:9000/b")
+
+	t.Setenv("EMAIL_PROVIDER", "log")
+	t.Setenv("EMAIL_FROM_ADDRESS", "no-reply@example.com")
+	t.Setenv("EMAIL_FROM_NAME", "Loja")
+	t.Setenv("EMAIL_VERIFY_LINK_BASE_URL", "https://app.example/verify")
+	t.Setenv("EMAIL_RESET_LINK_BASE_URL", "https://app.example/reset")
+
+	t.Setenv("SESSION_TTL_DEFAULT", "336h")
+	t.Setenv("SESSION_TTL_REMEMBER_ME", "720h")
+	t.Setenv("SESSION_REFRESH_AFTER", "24h")
+
+	t.Setenv("CSRF_ALLOWED_ORIGINS", "http://localhost:3000,https://app.example")
+	t.Setenv("RATELIMIT_TRUSTED_PROXIES", "10.0.0.0/8")
+	t.Setenv("COOKIES_SECURE_PREFIX", "false")
+
+	t.Setenv("VIACEP_BASE_URL", "https://viacep.test/ws")
+	t.Setenv("VIACEP_TIMEOUT", "5s")
+	t.Setenv("VIACEP_CACHE_TTL", "30m")
+
+	cfg, err := config.Load()
+	require.NoError(t, err)
+
+	assert.Equal(t, "log", cfg.Email.Provider)
+	assert.Equal(t, "no-reply@example.com", cfg.Email.FromAddress)
+	assert.Equal(t, "Loja", cfg.Email.FromName)
+	assert.Equal(t, "https://app.example/verify", cfg.Email.VerifyLinkBaseURL)
+	assert.Equal(t, "https://app.example/reset", cfg.Email.ResetLinkBaseURL)
+
+	assert.Equal(t, 336*time.Hour, cfg.Session.TTLDefault)
+	assert.Equal(t, 720*time.Hour, cfg.Session.TTLRememberMe)
+	assert.Equal(t, 24*time.Hour, cfg.Session.RefreshAfter)
+
+	assert.Equal(t, []string{"http://localhost:3000", "https://app.example"}, cfg.CSRF.AllowedOrigins)
+	assert.Equal(t, []string{"10.0.0.0/8"}, cfg.RateLimit.TrustedProxies)
+	assert.False(t, cfg.Cookies.SecurePrefix)
+
+	assert.Equal(t, "https://viacep.test/ws", cfg.ViaCEP.BaseURL)
+	assert.Equal(t, 5*time.Second, cfg.ViaCEP.Timeout)
+	assert.Equal(t, 30*time.Minute, cfg.ViaCEP.CacheTTL)
 }

@@ -45,6 +45,8 @@ func TestAPI_Smoke_HealthReadyMetrics(t *testing.T) {
 		"STORAGE_REGION=us-east-1",
 		"STORAGE_PUBLIC_BASE_URL="+minio.Endpoint+"/marketplace-test",
 		"STORAGE_USE_PATH_STYLE=true",
+		"EMAIL_VERIFY_LINK_BASE_URL=http://test.local/verify",
+		"EMAIL_RESET_LINK_BASE_URL=http://test.local/reset",
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -17,6 +17,12 @@ type Config struct {
 	CORS          CORS
 	Observability Observability
 	Storage       Storage
+	Email         Email
+	Session       Session
+	CSRF          CSRF
+	RateLimit     RateLimit
+	Cookies       Cookies
+	ViaCEP        ViaCEP
 }
 
 // App holds general application settings.
@@ -69,6 +75,46 @@ type Storage struct {
 	Region          string `env:"STORAGE_REGION" envDefault:"auto"`
 	PublicBaseURL   string `env:"STORAGE_PUBLIC_BASE_URL,required,notEmpty"`
 	UsePathStyle    bool   `env:"STORAGE_USE_PATH_STYLE" envDefault:"true"`
+}
+
+// Email configures outbound email delivery.
+type Email struct {
+	Provider            string `env:"EMAIL_PROVIDER" envDefault:"log"`
+	FromAddress         string `env:"EMAIL_FROM_ADDRESS" envDefault:"no-reply@localhost"`
+	FromName            string `env:"EMAIL_FROM_NAME" envDefault:"Loja"`
+	VerifyLinkBaseURL   string `env:"EMAIL_VERIFY_LINK_BASE_URL,required,notEmpty"`
+	ResetLinkBaseURL    string `env:"EMAIL_RESET_LINK_BASE_URL,required,notEmpty"`
+	SESRegion           string `env:"SES_REGION"`
+	SESConfigurationSet string `env:"SES_CONFIGURATION_SET"`
+}
+
+// Session configures session lifetime semantics.
+type Session struct {
+	TTLDefault    time.Duration `env:"SESSION_TTL_DEFAULT" envDefault:"336h"`     // 14d
+	TTLRememberMe time.Duration `env:"SESSION_TTL_REMEMBER_ME" envDefault:"720h"` // 30d
+	RefreshAfter  time.Duration `env:"SESSION_REFRESH_AFTER" envDefault:"24h"`
+}
+
+// CSRF configures CSRF middleware behaviour.
+type CSRF struct {
+	AllowedOrigins []string `env:"CSRF_ALLOWED_ORIGINS" envSeparator:"," envDefault:"http://localhost:3000"`
+}
+
+// RateLimit configures the rate-limit middleware.
+type RateLimit struct {
+	TrustedProxies []string `env:"RATELIMIT_TRUSTED_PROXIES" envSeparator:","`
+}
+
+// Cookies configures cookie naming/flags.
+type Cookies struct {
+	SecurePrefix bool `env:"COOKIES_SECURE_PREFIX" envDefault:"false"`
+}
+
+// ViaCEP configures the ViaCEP HTTP client (used in Phase 2b but added now).
+type ViaCEP struct {
+	BaseURL  string        `env:"VIACEP_BASE_URL" envDefault:"https://viacep.com.br/ws"`
+	Timeout  time.Duration `env:"VIACEP_TIMEOUT" envDefault:"3s"`
+	CacheTTL time.Duration `env:"VIACEP_CACHE_TTL" envDefault:"1h"`
 }
 
 // Load parses configuration from environment variables.

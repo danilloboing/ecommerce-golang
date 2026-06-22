@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,10 +18,16 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/danilloboing/marketplace-golang/internal/config"
+	"github.com/danilloboing/marketplace-golang/internal/core/csrf"
 	"github.com/danilloboing/marketplace-golang/internal/core/health"
 	"github.com/danilloboing/marketplace-golang/internal/core/httpx"
 	"github.com/danilloboing/marketplace-golang/internal/core/observability"
+	"github.com/danilloboing/marketplace-golang/internal/core/ratelimit"
+	"github.com/danilloboing/marketplace-golang/internal/core/sessionauth"
 	"github.com/danilloboing/marketplace-golang/internal/modules/catalog"
+	"github.com/danilloboing/marketplace-golang/internal/modules/identity"
+	"github.com/danilloboing/marketplace-golang/internal/modules/identity/transport"
+	"github.com/danilloboing/marketplace-golang/internal/platform/email"
 	imagex "github.com/danilloboing/marketplace-golang/internal/platform/image"
 	internalpostgres "github.com/danilloboing/marketplace-golang/internal/platform/postgres"
 	internalredis "github.com/danilloboing/marketplace-golang/internal/platform/redis"
@@ -31,6 +39,29 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func cookieName(base string, securePrefix bool) string {
+	if securePrefix {
+		return "__Secure-" + base
+	}
+	return base
+}
+
+func parseCIDRs(raw []string) ([]netip.Prefix, error) {
+	out := make([]netip.Prefix, 0, len(raw))
+	for _, s := range raw {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		p, err := netip.ParsePrefix(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid CIDR %q: %w", s, err)
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }
 
 func run() error {
@@ -119,6 +150,55 @@ func run() error {
 
 	catalogModule := catalog.New(pool, storeClient, imageProcessor, cfg.Admin.APIToken)
 	catalogModule.Mount(router)
+
+	emailSender, err := email.NewSenderFromConfig(email.Config{
+		Provider:            cfg.Email.Provider,
+		FromAddress:         cfg.Email.FromAddress,
+		FromName:            cfg.Email.FromName,
+		SESRegion:           cfg.Email.SESRegion,
+		SESConfigurationSet: cfg.Email.SESConfigurationSet,
+	}, logger)
+	if err != nil {
+		return fmt.Errorf("api: build email sender: %w", err)
+	}
+
+	sessions := sessionauth.NewRedisManager(sessionauth.RedisOptions{
+		Client:        rdb,
+		TTLDefault:    cfg.Session.TTLDefault,
+		TTLRememberMe: cfg.Session.TTLRememberMe,
+		RefreshAfter:  cfg.Session.RefreshAfter,
+	})
+
+	cookies := transport.CookieConfig{
+		SessionName:  cookieName("session_id", cfg.Cookies.SecurePrefix),
+		CSRFName:     cookieName("csrf_token", cfg.Cookies.SecurePrefix),
+		SecurePrefix: cfg.Cookies.SecurePrefix,
+	}
+
+	csrfCfg := csrf.Config{
+		AllowedOrigins: cfg.CSRF.AllowedOrigins,
+		CookieName:     cookies.CSRFName,
+	}
+
+	trustedProxies, err := parseCIDRs(cfg.RateLimit.TrustedProxies)
+	if err != nil {
+		return fmt.Errorf("api: parse trusted proxies: %w", err)
+	}
+
+	identityModule := identity.New(identity.Deps{
+		Pool:     pool,
+		Redis:    rdb,
+		Email:    emailSender,
+		Sessions: sessions,
+		Cookies:  cookies,
+		CSRFCfg:  csrfCfg,
+		RateLimitOpts: ratelimit.Options{
+			Client:         rdb,
+			TrustedProxies: trustedProxies,
+		},
+		Cfg: cfg,
+	})
+	identityModule.Mount(router)
 
 	srv := httpx.NewServer(httpx.ServerOptions{
 		Addr:            fmt.Sprintf(":%d", cfg.App.Port),

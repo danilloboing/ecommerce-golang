@@ -11,28 +11,45 @@ import (
 )
 
 type Querier interface {
+	ConsumeEmailVerifyToken(ctx context.Context, tokenHash []byte) error
+	ConsumePasswordResetToken(ctx context.Context, tokenHash []byte) error
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (CatalogCategory, error)
 	CreateImage(ctx context.Context, arg CreateImageParams) (CatalogImage, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (CreateProductRow, error)
 	CreateVariant(ctx context.Context, arg CreateVariantParams) (CatalogVariant, error)
 	DeleteCategory(ctx context.Context, id uuid.UUID) error
+	DeleteExpiredEmailVerifyTokens(ctx context.Context) (int64, error)
+	DeleteExpiredPasswordResetTokens(ctx context.Context) (int64, error)
 	DeleteImageByID(ctx context.Context, id uuid.UUID) error
 	DeleteImagesByProduct(ctx context.Context, productID uuid.UUID) error
 	DeleteProduct(ctx context.Context, id uuid.UUID) error
 	DeleteVariantsByProduct(ctx context.Context, productID uuid.UUID) error
+	FindAuthMethodByUserAndProvider(ctx context.Context, arg FindAuthMethodByUserAndProviderParams) (AuthMethod, error)
+	FindEmailVerifyToken(ctx context.Context, tokenHash []byte) (EmailVerifyToken, error)
+	FindPasswordResetToken(ctx context.Context, tokenHash []byte) (PasswordResetToken, error)
+	FindUserByEmail(ctx context.Context, email string) (User, error)
+	FindUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (CatalogCategory, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (CatalogCategory, error)
 	GetProductByID(ctx context.Context, id uuid.UUID) (GetProductByIDRow, error)
 	GetProductBySlug(ctx context.Context, slug string) (GetProductBySlugRow, error)
 	HealthCheck(ctx context.Context) (int32, error)
+	InsertAuthMethodPassword(ctx context.Context, arg InsertAuthMethodPasswordParams) (AuthMethod, error)
+	InsertEmailVerifyToken(ctx context.Context, arg InsertEmailVerifyTokenParams) error
+	InsertPasswordResetToken(ctx context.Context, arg InsertPasswordResetTokenParams) error
+	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
 	ListAdminProducts(ctx context.Context, arg ListAdminProductsParams) ([]ListAdminProductsRow, error)
 	ListCategories(ctx context.Context) ([]CatalogCategory, error)
 	ListImagesByProduct(ctx context.Context, productID uuid.UUID) ([]CatalogImage, error)
 	ListPublishedProducts(ctx context.Context, arg ListPublishedProductsParams) ([]ListPublishedProductsRow, error)
 	ListVariantsByProduct(ctx context.Context, productID uuid.UUID) ([]CatalogVariant, error)
+	MarkUserEmailVerified(ctx context.Context, id uuid.UUID) error
 	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]SearchProductsRow, error)
+	TouchAuthMethodLastUsed(ctx context.Context, id uuid.UUID) error
+	UpdateAuthMethodPassword(ctx context.Context, arg UpdateAuthMethodPasswordParams) error
 	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (CatalogCategory, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (UpdateProductRow, error)
+	UpdateUserName(ctx context.Context, arg UpdateUserNameParams) (User, error)
 }
 
 var _ Querier = (*Queries)(nil)

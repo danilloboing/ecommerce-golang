@@ -59,6 +59,8 @@ func TestImageE2E_AdminUploadAndPublicDetail(t *testing.T) {
 		"STORAGE_REGION=us-east-1",
 		"STORAGE_PUBLIC_BASE_URL="+minio.Endpoint+"/"+bucket,
 		"STORAGE_USE_PATH_STYLE=true",
+		"EMAIL_VERIFY_LINK_BASE_URL=http://test.local/verify",
+		"EMAIL_RESET_LINK_BASE_URL=http://test.local/reset",
 	)
 	var logBuf bytes.Buffer
 	cmd.Stdout = &logBuf

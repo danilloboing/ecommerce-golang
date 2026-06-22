@@ -30,3 +30,5 @@ cover.out
 
 # generated (will live in repo, but local cache excluded)
 .cache/
+
+.codegraph/

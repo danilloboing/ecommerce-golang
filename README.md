@@ -45,6 +45,29 @@ API listens on `http://localhost:8080`. Try `/health`, `/ready`, `/metrics`.
 | `make migrate` | Apply Atlas migrations |
 | `make sqlc-gen` | Regenerate sqlc code |
 
+## Environment variables
+
+Configuration is loaded from environment variables (see `.env.example`). The
+table below documents variables introduced per phase.
+
+### Phase 2a — Identity
+
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `EMAIL_PROVIDER` | `log` | no | `log` (dev/test, writes to slog) or `ses` (AWS SES). |
+| `EMAIL_FROM_ADDRESS` | `no-reply@localhost` | only when `EMAIL_PROVIDER=ses` | Envelope From address. |
+| `EMAIL_FROM_NAME` | `Loja` | no | Display name in From header. |
+| `EMAIL_VERIFY_LINK_BASE_URL` | — | yes | Frontend URL embedded in verify emails (e.g. `https://app.example/verify`). |
+| `EMAIL_RESET_LINK_BASE_URL` | — | yes | Frontend URL embedded in password reset emails. |
+| `SES_REGION` | — | only when `EMAIL_PROVIDER=ses` | AWS region. |
+| `SES_CONFIGURATION_SET` | — | no | Optional SES configuration set name. |
+| `SESSION_TTL_DEFAULT` | `336h` (14d) | no | Default session lifetime. |
+| `SESSION_TTL_REMEMBER_ME` | `720h` (30d) | no | Lifetime when `remember=true` at login. |
+| `SESSION_REFRESH_AFTER` | `24h` | no | Sliding window threshold to write last_activity. |
+| `CSRF_ALLOWED_ORIGINS` | `http://localhost:3000` | no | Comma-separated list of allowed Origin headers on mutations. |
+| `RATELIMIT_TRUSTED_PROXIES` | (empty) | no | Comma-separated CIDRs whose `X-Forwarded-For` is trusted. |
+| `COOKIES_SECURE_PREFIX` | `false` | no | Set to `true` in production behind HTTPS to enable `__Secure-` cookie name prefix. |
+
 ## Project structure
 
 See `docs/superpowers/specs/2026-05-08-marketplace-golang-design.md` section 3.
