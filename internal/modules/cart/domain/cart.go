@@ -50,3 +50,14 @@ func ValidateQuantity(q int) error {
 	}
 	return nil
 }
+
+// Owner identifies who a cart belongs to: exactly one of UserID or AnonID is set.
+type Owner struct {
+	UserID *uuid.UUID
+	AnonID *string
+}
+
+// Valid reports whether exactly one identity is present.
+func (o Owner) Valid() bool {
+	return (o.UserID != nil) != (o.AnonID != nil)
+}
