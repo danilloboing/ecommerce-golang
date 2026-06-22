@@ -87,6 +87,10 @@ func seedUserAndCart(t *testing.T, ctx context.Context, pool *pgxpool.Pool) uuid
 	return userID
 }
 
+// testAddressSnapshot is the frozen address JSON written into quotes so we can
+// assert it round-trips intact into orders.address_snapshot after ConfirmTx.
+var testAddressSnapshot = json.RawMessage(`{"street":"Rua das Flores","number":"42","city":"São Paulo","state":"SP","postal_code":"01310-100"}`)
+
 // seedQuote persists a checkout_quotes row through the real QuoteRepository so
 // the confirm under test reads exactly what production would have written.
 func seedQuote(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userID, variantID uuid.UUID, couponCode string) domain.Quote {
@@ -101,13 +105,14 @@ func seedQuote(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userID, va
 			UnitPriceCents:  9900,
 			ProductSnapshot: json.RawMessage(`{}`),
 		}},
-		Chosen:     application.ShippingOption{ServiceID: "sedex", Name: "Sedex", PriceCents: 1000, ETADays: 3},
-		CouponCode: couponCode,
-		Subtotal:   19800,
-		Shipping:   1000,
-		Discount:   0,
-		Total:      20800,
-		ExpiresAt:  time.Now().Add(time.Hour),
+		Chosen:          application.ShippingOption{ServiceID: "sedex", Name: "Sedex", PriceCents: 1000, ETADays: 3},
+		CouponCode:      couponCode,
+		AddressSnapshot: testAddressSnapshot,
+		Subtotal:        19800,
+		Shipping:        1000,
+		Discount:        0,
+		Total:           20800,
+		ExpiresAt:       time.Now().Add(time.Hour),
 	})
 	require.NoError(t, err)
 	return quote
@@ -158,6 +163,12 @@ func TestConfirmTx_HappyPath(t *testing.T) {
 	var orderStatus string
 	require.NoError(t, pool.QueryRow(ctx, `SELECT status FROM orders WHERE id = $1`, plan.OrderID).Scan(&orderStatus))
 	assert.Equal(t, "pending_payment", orderStatus)
+
+	// address_snapshot is the real frozen address — NOT the empty-object default.
+	var addrSnap []byte
+	require.NoError(t, pool.QueryRow(ctx, `SELECT address_snapshot FROM orders WHERE id = $1`, plan.OrderID).Scan(&addrSnap))
+	assert.JSONEq(t, string(testAddressSnapshot), string(addrSnap), "orders.address_snapshot must carry the quote's frozen address, not '{}'")
+	assert.NotEqual(t, "{}", string(addrSnap), "orders.address_snapshot must not be the empty-object default")
 
 	// stock_reservations row exists for the order/variant, status 'held'.
 	var resvStatus string

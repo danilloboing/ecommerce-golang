@@ -1,8 +1,8 @@
 -- name: CreateQuote :one
 INSERT INTO checkout_quotes (user_id, cart_fingerprint, lines_snapshot, shipping_snapshot,
                              coupon_code, subtotal_cents, shipping_cents, discount_cents,
-                             total_cents, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                             total_cents, address_snapshot, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
 
 -- name: GetUserQuote :one

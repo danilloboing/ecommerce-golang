@@ -48,6 +48,7 @@ func (r *QuoteRepo) Create(ctx context.Context, in application.NewQuote) (domain
 		ShippingCents:    in.Shipping,
 		DiscountCents:    in.Discount,
 		TotalCents:       in.Total,
+		AddressSnapshot:  jsonOrEmptyObject(in.AddressSnapshot),
 		ExpiresAt:        in.ExpiresAt,
 	})
 	if err != nil {
@@ -87,6 +88,7 @@ func mapQuote(row queries.CheckoutQuote) (domain.Quote, error) {
 		CartFingerprint:  row.CartFingerprint,
 		Lines:            lines,
 		CouponCode:       coupon,
+		AddressSnapshot:  json.RawMessage(row.AddressSnapshot),
 		ShippingSnapshot: json.RawMessage(row.ShippingSnapshot),
 		Subtotal:         row.SubtotalCents,
 		Shipping:         row.ShippingCents,

@@ -116,6 +116,7 @@ type CheckoutQuote struct {
 	TotalCents       int64
 	ExpiresAt        time.Time
 	CreatedAt        time.Time
+	AddressSnapshot  []byte
 }
 
 type Coupon struct {

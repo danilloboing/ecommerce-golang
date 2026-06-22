@@ -15,9 +15,9 @@ import (
 const createQuote = `-- name: CreateQuote :one
 INSERT INTO checkout_quotes (user_id, cart_fingerprint, lines_snapshot, shipping_snapshot,
                              coupon_code, subtotal_cents, shipping_cents, discount_cents,
-                             total_cents, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, user_id, cart_fingerprint, lines_snapshot, shipping_snapshot, coupon_code, subtotal_cents, shipping_cents, discount_cents, total_cents, expires_at, created_at
+                             total_cents, address_snapshot, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id, user_id, cart_fingerprint, lines_snapshot, shipping_snapshot, coupon_code, subtotal_cents, shipping_cents, discount_cents, total_cents, expires_at, created_at, address_snapshot
 `
 
 type CreateQuoteParams struct {
@@ -30,6 +30,7 @@ type CreateQuoteParams struct {
 	ShippingCents    int64
 	DiscountCents    int64
 	TotalCents       int64
+	AddressSnapshot  []byte
 	ExpiresAt        time.Time
 }
 
@@ -44,6 +45,7 @@ func (q *Queries) CreateQuote(ctx context.Context, arg CreateQuoteParams) (Check
 		arg.ShippingCents,
 		arg.DiscountCents,
 		arg.TotalCents,
+		arg.AddressSnapshot,
 		arg.ExpiresAt,
 	)
 	var i CheckoutQuote
@@ -60,6 +62,7 @@ func (q *Queries) CreateQuote(ctx context.Context, arg CreateQuoteParams) (Check
 		&i.TotalCents,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.AddressSnapshot,
 	)
 	return i, err
 }
@@ -88,7 +91,7 @@ func (q *Queries) GetIdempotencyKey(ctx context.Context, arg GetIdempotencyKeyPa
 }
 
 const getUserQuote = `-- name: GetUserQuote :one
-SELECT id, user_id, cart_fingerprint, lines_snapshot, shipping_snapshot, coupon_code, subtotal_cents, shipping_cents, discount_cents, total_cents, expires_at, created_at FROM checkout_quotes WHERE id = $1 AND user_id = $2
+SELECT id, user_id, cart_fingerprint, lines_snapshot, shipping_snapshot, coupon_code, subtotal_cents, shipping_cents, discount_cents, total_cents, expires_at, created_at, address_snapshot FROM checkout_quotes WHERE id = $1 AND user_id = $2
 `
 
 type GetUserQuoteParams struct {
@@ -112,6 +115,7 @@ func (q *Queries) GetUserQuote(ctx context.Context, arg GetUserQuoteParams) (Che
 		&i.TotalCents,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.AddressSnapshot,
 	)
 	return i, err
 }
