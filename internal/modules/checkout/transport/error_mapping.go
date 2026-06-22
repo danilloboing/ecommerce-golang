@@ -18,7 +18,7 @@ func mapErrorToHTTP(err error) (int, string, string) {
 		return 409, "quote_expired", "quote expired — re-quote"
 	case errors.Is(err, checkoutdomain.ErrCartChanged):
 		return 409, "cart_changed", "cart changed — re-quote"
-	case errors.Is(err, invdomain.ErrInsufficientStock):
+	case errors.Is(err, checkoutdomain.ErrInsufficientStock), errors.Is(err, invdomain.ErrInsufficientStock):
 		return 422, "insufficient_stock", "insufficient stock"
 	case errors.Is(err, checkoutdomain.ErrCouponInvalid):
 		return 422, "coupon_invalid", "coupon invalid"
