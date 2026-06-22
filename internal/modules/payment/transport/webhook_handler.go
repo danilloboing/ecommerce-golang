@@ -2,13 +2,13 @@
 package transport
 
 import (
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/danilloboing/marketplace-golang/internal/core/responsex"
 	"github.com/danilloboing/marketplace-golang/internal/modules/payment/application"
 )
 
@@ -42,26 +42,20 @@ func (h *WebhookHandler) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	sig := r.Header.Get("X-Webhook-Signature")
 	ev, err := h.provider.VerifyWebhook(body, sig)
 	if err != nil {
-		writeJSON(w, statusForError(err), map[string]string{"error": "invalid_signature"})
+		responsex.Error(w, r, statusForError(err), "invalid_signature", "invalid signature")
 		return
 	}
 
 	if h.applier == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_error"})
+		responsex.Error(w, r, http.StatusInternalServerError, "internal_error", "internal error")
 		return
 	}
 
 	if err := h.applier.Apply(r.Context(), ev); err != nil {
 		slog.Error("webhook apply failed", "error", err.Error())
-		http.Error(w, `{"error":"internal_error"}`, http.StatusInternalServerError)
+		responsex.Error(w, r, http.StatusInternalServerError, "internal_error", "internal error")
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	responsex.JSON(w, http.StatusOK, struct{}{})
 }

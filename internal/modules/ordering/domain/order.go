@@ -25,7 +25,6 @@ type Order struct {
 type OrderItem struct {
 	ID        uuid.UUID       `json:"id"`
 	OrderID   uuid.UUID       `json:"order_id"`
-	ProductID uuid.UUID       `json:"product_id"`
 	VariantID uuid.UUID       `json:"variant_id"`
 	Quantity  int32           `json:"quantity"`
 	UnitPrice int64           `json:"unit_price"`

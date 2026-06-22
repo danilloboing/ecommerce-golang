@@ -29,25 +29,25 @@ func NewIdempotencyRepo(pool *pgxpool.Pool) *IdempotencyRepo {
 }
 
 // Lookup classifies an idempotency key for (userID, key):
-//   - absent            → IdemHit{Found: false}
+//   - absent            → IdemHit{} (zero value)
 //   - same requestHash  → IdemHit{Replay: true} with the decoded stored result
 //   - different hash    → IdemHit{Conflict: true} (key reused for another request)
 func (r *IdempotencyRepo) Lookup(ctx context.Context, userID uuid.UUID, key, requestHash string) (application.IdemHit, error) {
 	row, err := r.q.GetIdempotencyKey(ctx, queries.GetIdempotencyKeyParams{UserID: userID, Key: key})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return application.IdemHit{Found: false}, nil
+		return application.IdemHit{}, nil
 	}
 	if err != nil {
 		return application.IdemHit{}, fmt.Errorf("checkout idempotency: lookup: %w", err)
 	}
 
 	if row.RequestHash != requestHash {
-		return application.IdemHit{Found: true, Conflict: true}, nil
+		return application.IdemHit{Conflict: true}, nil
 	}
 
 	var stored application.ConfirmResult
 	if err := json.Unmarshal(row.Response, &stored); err != nil {
 		return application.IdemHit{}, fmt.Errorf("checkout idempotency: decode stored result: %w", err)
 	}
-	return application.IdemHit{Found: true, Replay: true, StoredResult: &stored}, nil
+	return application.IdemHit{Replay: true, StoredResult: &stored}, nil
 }

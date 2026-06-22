@@ -77,7 +77,6 @@ func TestGetOrder_WithSession(t *testing.T) {
 	item := domain.OrderItem{
 		ID:        uuid.New(),
 		OrderID:   orderID,
-		ProductID: uuid.New(),
 		VariantID: uuid.New(),
 		Quantity:  2,
 		UnitPrice: 2500,

@@ -1017,11 +1017,10 @@ components:
         created_at: { type: string, format: date-time }
     OrderItem:
       type: object
-      required: [id, order_id, product_id, variant_id, quantity, unit_price, created_at]
+      required: [id, order_id, variant_id, quantity, unit_price, created_at]
       properties:
         id: { type: string, format: uuid }
         order_id: { type: string, format: uuid }
-        product_id: { type: string, format: uuid }
         variant_id: { type: string, format: uuid }
         quantity: { type: integer }
         unit_price: { type: integer, format: int64 }

@@ -36,6 +36,7 @@ import (
 	"github.com/danilloboing/marketplace-golang/internal/modules/inventory"
 	"github.com/danilloboing/marketplace-golang/internal/modules/ordering"
 	"github.com/danilloboing/marketplace-golang/internal/modules/payment"
+	payapplication "github.com/danilloboing/marketplace-golang/internal/modules/payment/application"
 	payinfra "github.com/danilloboing/marketplace-golang/internal/modules/payment/infrastructure"
 	"github.com/danilloboing/marketplace-golang/internal/modules/shipping"
 	"github.com/danilloboing/marketplace-golang/internal/platform/email"
@@ -76,7 +77,7 @@ func parseCIDRs(raw []string) ([]netip.Prefix, error) {
 	return out, nil
 }
 
-func newPaymentProvider(cfg config.Payment) *payinfra.MockProvider {
+func newPaymentProvider(cfg config.Payment) payapplication.PaymentProvider {
 	switch cfg.Provider {
 	case "mock":
 		return payinfra.NewMockProvider(cfg.WebhookSecret)

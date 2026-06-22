@@ -14,7 +14,6 @@ import (
 type OrderItemResponse struct {
 	ID        uuid.UUID       `json:"id"`
 	OrderID   uuid.UUID       `json:"order_id"`
-	ProductID uuid.UUID       `json:"product_id"`
 	VariantID uuid.UUID       `json:"variant_id"`
 	Quantity  int32           `json:"quantity"`
 	UnitPrice int64           `json:"unit_price"`
@@ -56,7 +55,6 @@ func toOrderItemResponse(item domain.OrderItem) OrderItemResponse {
 	return OrderItemResponse{
 		ID:        item.ID,
 		OrderID:   item.OrderID,
-		ProductID: item.ProductID,
 		VariantID: item.VariantID,
 		Quantity:  item.Quantity,
 		UnitPrice: item.UnitPrice,
