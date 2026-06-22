@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/danilloboing/marketplace-golang/internal/modules/checkout/domain"
+	orderingDomain "github.com/danilloboing/marketplace-golang/internal/modules/ordering/domain"
 )
 
 // ---------------------------------------------------------------------------
@@ -53,16 +54,13 @@ type QuoteInput struct {
 }
 
 // QuoteLine is one locked line inside a QuoteResult.
-type QuoteLine struct {
-	VariantID      uuid.UUID
-	Quantity       int
-	UnitPriceCents int64
-}
+// Deprecated: prefer domain.QuoteLine. Kept for backward compatibility.
+type QuoteLine = domain.QuoteLine
 
 // QuoteResult is the computed and persisted quote returned to callers.
 type QuoteResult struct {
 	QuoteID   uuid.UUID
-	Lines     []QuoteLine
+	Lines     []domain.QuoteLine
 	Options   []ShippingOption
 	Chosen    ShippingOption
 	Subtotal  int64
@@ -74,16 +72,63 @@ type QuoteResult struct {
 
 // NewQuote carries all fields required to persist a checkout_quotes row.
 type NewQuote struct {
-	UserID          uuid.UUID
-	CartFingerprint string
-	Lines           []QuoteLine
-	Chosen          ShippingOption
-	CouponCode      string
-	Subtotal        int64
-	Shipping        int64
-	Discount        int64
-	Total           int64
-	ExpiresAt       time.Time
+	UserID           uuid.UUID
+	CartFingerprint  string
+	Lines            []domain.QuoteLine
+	Chosen           ShippingOption
+	CouponCode       string
+	AddressSnapshot  json.RawMessage
+	ShippingSnapshot json.RawMessage
+	Subtotal         int64
+	Shipping         int64
+	Discount         int64
+	Total            int64
+	ExpiresAt        time.Time
+}
+
+// ConfirmInput carries the parameters needed to confirm an order from a quote.
+type ConfirmInput struct {
+	UserID         uuid.UUID
+	QuoteID        uuid.UUID
+	IdempotencyKey string
+	PaymentMethod  string // e.g. "pix"
+}
+
+// ConfirmResult is the result of a successful order confirmation.
+type ConfirmResult struct {
+	Order  orderingDomain.Order
+	Charge ChargeView
+}
+
+// ConfirmPlan is the full plan passed to ConfirmRepository.ConfirmTx for atomic execution.
+type ConfirmPlan struct {
+	UserID               uuid.UUID
+	OrderID              uuid.UUID
+	Quote                domain.Quote
+	Cart                 CartView
+	Charge               ChargeView
+	IdempotencyKey       string
+	RequestHash          string
+	ReservationExpiresAt time.Time
+	ResponseJSON         []byte
+}
+
+// IdemHit is the result of an idempotency key lookup.
+type IdemHit struct {
+	Found        bool
+	Replay       bool          // true = same hash, return stored result
+	Conflict     bool          // true = different hash, return ErrIdempotencyConflict
+	StoredResult *ConfirmResult // non-nil if Replay=true
+}
+
+// ChargeView is a checkout-local projection of a payment charge.
+type ChargeView struct {
+	ChargeID  uuid.UUID
+	OrderID   uuid.UUID
+	Amount    int64
+	Method    string
+	Status    string
+	CreatedAt time.Time
 }
 
 // ---------------------------------------------------------------------------
@@ -122,4 +167,22 @@ type QuoteRepository interface {
 // discount in cents. Implemented by *CouponService (Task 15).
 type CouponValidator interface {
 	Validate(ctx context.Context, code string, subtotalCents int64) (int64, error)
+}
+
+// ConfirmRepository handles the atomic confirm transaction.
+// The implementation (Task 18) executes idempotency insert, stock reservation,
+// coupon redemption, order+items creation, cart conversion, and charge persist
+// all inside a single database transaction.
+type ConfirmRepository interface {
+	ConfirmTx(ctx context.Context, plan ConfirmPlan) (orderingDomain.Order, error)
+}
+
+// Idempotency handles idempotency key lookups before the confirm transaction.
+type Idempotency interface {
+	Lookup(ctx context.Context, userID uuid.UUID, key string, requestHash string) (IdemHit, error)
+}
+
+// Charger creates payment charges with the payment provider.
+type Charger interface {
+	CreateCharge(ctx context.Context, orderID uuid.UUID, amount int64, method string) (ChargeView, error)
 }

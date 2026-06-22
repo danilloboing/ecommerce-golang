@@ -4,35 +4,46 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/danilloboing/marketplace-golang/internal/modules/checkout/domain"
 )
 
 const defaultQuoteTTL = 30 * time.Minute
+const defaultReservationTTL = 15 * time.Minute
 
 // CheckoutDeps groups all port dependencies for CheckoutService.
 type CheckoutDeps struct {
-	Carts     CartReader
-	Prices    PriceReader
-	Shipping  ShippingQuoter
-	Addresses AddressReader
-	Quotes    QuoteRepository
-	Coupons   CouponValidator
+	Carts       CartReader
+	Prices      PriceReader
+	Shipping    ShippingQuoter
+	Addresses   AddressReader
+	Quotes      QuoteRepository
+	Coupons     CouponValidator
+	ConfirmRepo ConfirmRepository
+	Idempotency Idempotency
+	Charger     Charger
 }
 
-// CheckoutService orchestrates the checkout quote flow.
+// CheckoutService orchestrates the checkout quote and confirm flows.
 type CheckoutService struct {
-	carts     CartReader
-	prices    PriceReader
-	shipping  ShippingQuoter
-	addresses AddressReader
-	quotes    QuoteRepository
-	coupons   CouponValidator
-	now       func() time.Time
-	quoteTTL  time.Duration
+	carts          CartReader
+	prices         PriceReader
+	shipping       ShippingQuoter
+	addresses      AddressReader
+	quotes         QuoteRepository
+	coupons        CouponValidator
+	confirmRepo    ConfirmRepository
+	idempotency    Idempotency
+	charger        Charger
+	now            func() time.Time
+	quoteTTL       time.Duration
+	reservationTTL time.Duration
 }
 
 // Option is a functional option for CheckoutService.
@@ -48,17 +59,26 @@ func WithQuoteTTL(d time.Duration) Option {
 	return func(s *CheckoutService) { s.quoteTTL = d }
 }
 
+// WithReservationTTL sets how long a stock reservation is held after confirm.
+func WithReservationTTL(d time.Duration) Option {
+	return func(s *CheckoutService) { s.reservationTTL = d }
+}
+
 // NewCheckoutService builds a CheckoutService with the given ports.
 func NewCheckoutService(deps CheckoutDeps, opts ...Option) *CheckoutService {
 	s := &CheckoutService{
-		carts:     deps.Carts,
-		prices:    deps.Prices,
-		shipping:  deps.Shipping,
-		addresses: deps.Addresses,
-		quotes:    deps.Quotes,
-		coupons:   deps.Coupons,
-		now:       time.Now,
-		quoteTTL:  defaultQuoteTTL,
+		carts:          deps.Carts,
+		prices:         deps.Prices,
+		shipping:       deps.Shipping,
+		addresses:      deps.Addresses,
+		quotes:         deps.Quotes,
+		coupons:        deps.Coupons,
+		confirmRepo:    deps.ConfirmRepo,
+		idempotency:    deps.Idempotency,
+		charger:        deps.Charger,
+		now:            time.Now,
+		quoteTTL:       defaultQuoteTTL,
+		reservationTTL: defaultReservationTTL,
 	}
 	for _, o := range opts {
 		o(s)
@@ -88,14 +108,14 @@ func (s *CheckoutService) Quote(ctx context.Context, in QuoteInput) (QuoteResult
 	}
 
 	var subtotal int64
-	lines := make([]QuoteLine, 0, len(cart.Lines))
+	lines := make([]domain.QuoteLine, 0, len(cart.Lines))
 	for _, l := range cart.Lines {
 		price, err := s.prices.UnitPrice(ctx, l.VariantID)
 		if err != nil {
 			return QuoteResult{}, err
 		}
 		subtotal += price * int64(l.Quantity)
-		lines = append(lines, QuoteLine{
+		lines = append(lines, domain.QuoteLine{
 			VariantID:      l.VariantID,
 			Quantity:       l.Quantity,
 			UnitPriceCents: price,
@@ -129,6 +149,7 @@ func (s *CheckoutService) Quote(ctx context.Context, in QuoteInput) (QuoteResult
 		Lines:           lines,
 		Chosen:          chosen,
 		CouponCode:      in.CouponCode,
+		AddressSnapshot: addr.Snapshot,
 		Subtotal:        subtotal,
 		Shipping:        chosen.PriceCents,
 		Discount:        discount,
@@ -150,6 +171,75 @@ func (s *CheckoutService) Quote(ctx context.Context, in QuoteInput) (QuoteResult
 		Total:     total,
 		ExpiresAt: q.ExpiresAt,
 	}, nil
+}
+
+// Confirm atomically converts a valid, unexpired quote into an order.
+//
+// Steps:
+//  1. Idempotency pre-check — replay stored result or detect conflict.
+//  2. Load and validate the quote (existence + expiry + cart fingerprint).
+//  3. Create a payment charge (pure/in-process for phase 3a).
+//  4. Execute the atomic ConfirmTx (idempotency insert, reserve, order, cart convert).
+func (s *CheckoutService) Confirm(ctx context.Context, in ConfirmInput) (ConfirmResult, error) {
+	reqHash := hashConfirm(in.QuoteID)
+
+	hit, err := s.idempotency.Lookup(ctx, in.UserID, in.IdempotencyKey, reqHash)
+	if err != nil {
+		return ConfirmResult{}, err
+	}
+	if hit.Replay {
+		return *hit.StoredResult, nil
+	}
+	if hit.Conflict {
+		return ConfirmResult{}, domain.ErrIdempotencyConflict
+	}
+
+	q, err := s.quotes.GetUserQuote(ctx, in.QuoteID, in.UserID)
+	if err != nil {
+		return ConfirmResult{}, domain.ErrQuoteNotFound
+	}
+	if !q.ExpiresAt.After(s.now()) {
+		return ConfirmResult{}, domain.ErrQuoteExpired
+	}
+
+	cart, err := s.carts.ActiveCart(ctx, in.UserID)
+	if err != nil {
+		return ConfirmResult{}, err
+	}
+	if fingerprint(cart.Lines) != q.CartFingerprint {
+		return ConfirmResult{}, domain.ErrCartChanged
+	}
+
+	orderID := uuid.New()
+	charge, err := s.charger.CreateCharge(ctx, orderID, q.Total, in.PaymentMethod)
+	if err != nil {
+		return ConfirmResult{}, err
+	}
+
+	responseJSON, _ := json.Marshal(ConfirmResult{Charge: charge})
+	order, err := s.confirmRepo.ConfirmTx(ctx, ConfirmPlan{
+		UserID:               in.UserID,
+		OrderID:              orderID,
+		Quote:                q,
+		Cart:                 cart,
+		Charge:               charge,
+		IdempotencyKey:       in.IdempotencyKey,
+		RequestHash:          reqHash,
+		ReservationExpiresAt: s.now().Add(s.reservationTTL),
+		ResponseJSON:         responseJSON,
+	})
+	if err != nil {
+		return ConfirmResult{}, err
+	}
+
+	return ConfirmResult{Order: order, Charge: charge}, nil
+}
+
+// hashConfirm returns a deterministic hex hash of a quote ID, used as the
+// idempotency request hash so replays with the same quoteID are always safe.
+func hashConfirm(quoteID uuid.UUID) string {
+	h := sha256.Sum256([]byte(quoteID.String()))
+	return hex.EncodeToString(h[:])
 }
 
 // pickShipping returns the requested shipping option, or the cheapest one when
