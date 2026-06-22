@@ -115,6 +115,8 @@ func (h *AddressHandlers) create(w http.ResponseWriter, r *http.Request) {
 	responsex.JSON(w, http.StatusCreated, toAddressResponse(a))
 }
 
+// update applies a partial address update. Note: is_default is NOT changed here —
+// clients set the default via POST /me/addresses/{id}/default (setDefault).
 func (h *AddressHandlers) update(w http.ResponseWriter, r *http.Request) {
 	uid, ok := h.userID(r)
 	if !ok {

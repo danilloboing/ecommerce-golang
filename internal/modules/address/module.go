@@ -13,6 +13,9 @@ import (
 	"github.com/danilloboing/marketplace-golang/internal/platform/viacep"
 )
 
+// Compile-time assertion: *application.AddressService must satisfy transport.AddressWriter.
+var _ transport.AddressWriter = (*application.AddressService)(nil)
+
 // Module wires the address bounded context onto a chi router.
 type Module struct {
 	addresses     *transport.AddressHandlers
@@ -35,9 +38,6 @@ type Deps struct {
 func New(d Deps) *Module {
 	repo := infrastructure.New(d.Pool)
 	svc := application.NewAddressService(repo)
-
-	// Compile-time assertion: *application.AddressService must satisfy AddressWriter.
-	var _ transport.AddressWriter = svc
 
 	return &Module{
 		addresses:     transport.NewAddressHandlers(svc),

@@ -1,6 +1,7 @@
 package transport_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -33,6 +34,14 @@ func TestCEPHandler_Success(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var body struct {
+		PostalCode string `json:"postal_code"`
+		State      string `json:"state"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "01001000", body.PostalCode)
+	assert.Equal(t, "SP", body.State)
 }
 
 func TestCEPHandler_NotFound(t *testing.T) {
@@ -47,4 +56,12 @@ func TestCEPHandler_NotFound(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, "cep_not_found", body.Error.Code)
 }
