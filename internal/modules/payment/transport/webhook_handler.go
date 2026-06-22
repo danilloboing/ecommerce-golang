@@ -3,7 +3,6 @@ package transport
 
 import (
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,7 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/danilloboing/marketplace-golang/internal/modules/payment/application"
-	"github.com/danilloboing/marketplace-golang/internal/modules/payment/domain"
 )
 
 // WebhookHandler handles inbound payment provider webhook notifications.
@@ -44,11 +42,7 @@ func (h *WebhookHandler) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	sig := r.Header.Get("X-Webhook-Signature")
 	ev, err := h.provider.VerifyWebhook(body, sig)
 	if err != nil {
-		if errors.Is(err, domain.ErrInvalidSignature) {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_signature"})
-			return
-		}
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_signature"})
+		writeJSON(w, statusForError(err), map[string]string{"error": "invalid_signature"})
 		return
 	}
 
