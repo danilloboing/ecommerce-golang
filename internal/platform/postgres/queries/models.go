@@ -10,6 +10,22 @@ import (
 	"github.com/google/uuid"
 )
 
+type Address struct {
+	ID            uuid.UUID
+	UserID        uuid.UUID
+	RecipientName string
+	PostalCode    string
+	Street        string
+	Number        string
+	Complement    *string
+	Neighborhood  string
+	City          string
+	State         string
+	IsDefault     bool
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
 type AuthMethod struct {
 	ID              uuid.UUID
 	UserID          uuid.UUID
@@ -18,6 +34,25 @@ type AuthMethod struct {
 	ProviderSubject *string
 	CreatedAt       time.Time
 	LastUsedAt      *time.Time
+}
+
+type Cart struct {
+	ID            uuid.UUID
+	UserID        *uuid.UUID
+	AnonSessionID *string
+	Status        string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type CartItem struct {
+	ID             uuid.UUID
+	CartID         uuid.UUID
+	VariantID      uuid.UUID
+	Quantity       int32
+	UnitPriceCents int64
+	AddedAt        time.Time
+	UpdatedAt      time.Time
 }
 
 type CatalogCategory struct {

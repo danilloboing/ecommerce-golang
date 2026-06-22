@@ -6,17 +6,27 @@ package queries
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 type Querier interface {
+	ClearDefaultAddress(ctx context.Context, userID uuid.UUID) error
 	ConsumeEmailVerifyToken(ctx context.Context, tokenHash []byte) error
 	ConsumePasswordResetToken(ctx context.Context, tokenHash []byte) error
+	CountActiveItems(ctx context.Context, cartID uuid.UUID) (int64, error)
+	CreateAddress(ctx context.Context, arg CreateAddressParams) (Address, error)
+	CreateAnonCart(ctx context.Context, anonSessionID *string) (Cart, error)
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (CatalogCategory, error)
 	CreateImage(ctx context.Context, arg CreateImageParams) (CatalogImage, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (CreateProductRow, error)
+	CreateUserCart(ctx context.Context, userID *uuid.UUID) (Cart, error)
 	CreateVariant(ctx context.Context, arg CreateVariantParams) (CatalogVariant, error)
+	DeleteAbandonedCarts(ctx context.Context, updatedAt time.Time) (int64, error)
+	DeleteAddress(ctx context.Context, arg DeleteAddressParams) (int64, error)
+	DeleteCartItem(ctx context.Context, arg DeleteCartItemParams) (int64, error)
+	DeleteCartItemsByCart(ctx context.Context, cartID uuid.UUID) error
 	DeleteCategory(ctx context.Context, id uuid.UUID) error
 	DeleteExpiredEmailVerifyTokens(ctx context.Context) (int64, error)
 	DeleteExpiredPasswordResetTokens(ctx context.Context) (int64, error)
@@ -29,27 +39,39 @@ type Querier interface {
 	FindPasswordResetToken(ctx context.Context, tokenHash []byte) (PasswordResetToken, error)
 	FindUserByEmail(ctx context.Context, email string) (User, error)
 	FindUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	GetActiveCartByAnon(ctx context.Context, anonSessionID *string) (Cart, error)
+	GetActiveCartByUser(ctx context.Context, userID *uuid.UUID) (Cart, error)
+	GetAddressByID(ctx context.Context, arg GetAddressByIDParams) (Address, error)
+	GetCartItemByID(ctx context.Context, arg GetCartItemByIDParams) (CartItem, error)
 	GetCategoryByID(ctx context.Context, id uuid.UUID) (CatalogCategory, error)
 	GetCategoryBySlug(ctx context.Context, slug string) (CatalogCategory, error)
 	GetProductByID(ctx context.Context, id uuid.UUID) (GetProductByIDRow, error)
 	GetProductBySlug(ctx context.Context, slug string) (GetProductBySlugRow, error)
+	GetVariantUnitPrice(ctx context.Context, id uuid.UUID) (int64, error)
 	HealthCheck(ctx context.Context) (int32, error)
 	InsertAuthMethodPassword(ctx context.Context, arg InsertAuthMethodPasswordParams) (AuthMethod, error)
 	InsertEmailVerifyToken(ctx context.Context, arg InsertEmailVerifyTokenParams) error
 	InsertPasswordResetToken(ctx context.Context, arg InsertPasswordResetTokenParams) error
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
+	ListAddressesByUser(ctx context.Context, userID uuid.UUID) ([]Address, error)
 	ListAdminProducts(ctx context.Context, arg ListAdminProductsParams) ([]ListAdminProductsRow, error)
+	ListCartItems(ctx context.Context, cartID uuid.UUID) ([]CartItem, error)
 	ListCategories(ctx context.Context) ([]CatalogCategory, error)
 	ListImagesByProduct(ctx context.Context, productID uuid.UUID) ([]CatalogImage, error)
 	ListPublishedProducts(ctx context.Context, arg ListPublishedProductsParams) ([]ListPublishedProductsRow, error)
 	ListVariantsByProduct(ctx context.Context, productID uuid.UUID) ([]CatalogVariant, error)
 	MarkUserEmailVerified(ctx context.Context, id uuid.UUID) error
 	SearchProducts(ctx context.Context, arg SearchProductsParams) ([]SearchProductsRow, error)
+	SetCartStatus(ctx context.Context, arg SetCartStatusParams) error
+	SetDefaultAddress(ctx context.Context, arg SetDefaultAddressParams) (Address, error)
 	TouchAuthMethodLastUsed(ctx context.Context, id uuid.UUID) error
+	UpdateAddress(ctx context.Context, arg UpdateAddressParams) (Address, error)
 	UpdateAuthMethodPassword(ctx context.Context, arg UpdateAuthMethodPasswordParams) error
+	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (CartItem, error)
 	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (CatalogCategory, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (UpdateProductRow, error)
 	UpdateUserName(ctx context.Context, arg UpdateUserNameParams) (User, error)
+	UpsertCartItem(ctx context.Context, arg UpsertCartItemParams) (CartItem, error)
 }
 
 var _ Querier = (*Queries)(nil)
