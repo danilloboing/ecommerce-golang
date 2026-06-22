@@ -83,15 +83,15 @@ type confirmBody struct {
 }
 
 func (h *CheckoutHandlers) confirm(w http.ResponseWriter, r *http.Request) {
-	idemKey := r.Header.Get("Idempotency-Key")
-	if idemKey == "" {
-		responsex.Error(w, r, http.StatusBadRequest, "missing_idempotency_key", "Idempotency-Key header is required")
-		return
-	}
-
 	sess, ok := sessionauth.SessionFromContext(r.Context())
 	if !ok {
 		responsex.Error(w, r, http.StatusUnauthorized, "unauthenticated", "authentication required")
+		return
+	}
+
+	idemKey := r.Header.Get("Idempotency-Key")
+	if idemKey == "" {
+		responsex.Error(w, r, http.StatusBadRequest, "missing_idempotency_key", "Idempotency-Key header is required")
 		return
 	}
 

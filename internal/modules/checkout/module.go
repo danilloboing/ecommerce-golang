@@ -119,10 +119,10 @@ func New(d Deps) *Module {
 		return opts, nil
 	})
 
-	charger := d.Charger
-	if charger == nil {
-		charger = infrastructure.NewMockCharger()
+	if d.Charger == nil {
+		panic("checkout.New: Charger is required (pass the payment ChargeService adapter; for tests pass infrastructure.NewMockCharger() explicitly)")
 	}
+	charger := d.Charger
 
 	// --- services ---
 	checkoutSvc := application.NewCheckoutService(application.CheckoutDeps{
