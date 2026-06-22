@@ -18,6 +18,12 @@ tags:
     description: Shopping cart (anonymous or user)
   - name: address
     description: User shipping addresses and CEP lookup
+  - name: checkout
+    description: Quote and confirm checkout flow
+  - name: order
+    description: Order read endpoints for authenticated users
+  - name: payment
+    description: Payment provider webhook ingestion
 paths:
   /health:
     get:
@@ -514,6 +520,191 @@ paths:
       summary: Set address as default
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Address' } } } }, '404': { description: Not found } }
+  /checkout/quote:
+    post:
+      tags: [checkout]
+      summary: Generate a locked quote for the current cart
+      operationId: checkoutQuote
+      security: [{ session: [] }]
+      parameters:
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuoteInput' }
+      responses:
+        '200':
+          description: Quote generated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quote' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: Address not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: Cart empty or coupon invalid
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /checkout/confirm:
+    post:
+      tags: [checkout]
+      summary: Confirm a quote and create an order
+      operationId: checkoutConfirm
+      security: [{ session: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+        - name: X-CSRF-Token
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quote_id]
+              properties:
+                quote_id: { type: string, format: uuid }
+                payment_method: { type: string, default: pix }
+      responses:
+        '201':
+          description: Order created and payment initiated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConfirmResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Quote expired, cart changed, or idempotency conflict
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: Insufficient stock or coupon unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /me/orders:
+    get:
+      tags: [order]
+      summary: List orders for the authenticated user
+      operationId: listMyOrders
+      security: [{ session: [] }]
+      responses:
+        '200':
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/OrderListItem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /me/orders/{id}:
+    get:
+      tags: [order]
+      summary: Get a single order with items
+      operationId: getMyOrder
+      security: [{ session: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Order with items
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /payments/webhook:
+    post:
+      tags: [payment]
+      summary: Receive a signed payment provider webhook
+      operationId: paymentsWebhook
+      parameters:
+        - name: X-Webhook-Signature
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Accepted
+        '401':
+          description: Invalid signature
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+  /admin/variants/{id}/stock:
+    put:
+      summary: Set stock for a variant (admin)
+      operationId: adminSetStock
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StockInput' }
+      responses:
+        '200':
+          description: Stock updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: Stock version conflict
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /admin/coupons:
+    post:
+      tags: [checkout]
+      summary: Create a coupon (admin)
+      operationId: adminCreateCoupon
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CouponInput' }
+      responses:
+        '201':
+          description: Coupon created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Coupon' }
+        '400': { $ref: '#/components/responses/BadRequest' }
 components:
   securitySchemes:
     bearerAuth:
@@ -772,3 +963,135 @@ components:
         neighborhood: { type: string }
         city: { type: string }
         state: { type: string }
+    QuoteLine:
+      type: object
+      required: [variant_id, quantity, unit_price_cents]
+      properties:
+        variant_id: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1 }
+        unit_price_cents: { type: integer, format: int64, minimum: 0 }
+    ShippingOption:
+      type: object
+      required: [service_id, name, price_cents, eta_days]
+      properties:
+        service_id: { type: string }
+        name: { type: string }
+        price_cents: { type: integer, format: int64, minimum: 0 }
+        eta_days: { type: integer, minimum: 0 }
+    Quote:
+      type: object
+      required: [quote_id, lines, options, chosen, subtotal_cents, shipping_cents, discount_cents, total_cents, expires_at]
+      properties:
+        quote_id: { type: string, format: uuid }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/QuoteLine' }
+        options:
+          type: array
+          items: { $ref: '#/components/schemas/ShippingOption' }
+        chosen: { $ref: '#/components/schemas/ShippingOption' }
+        subtotal_cents: { type: integer, format: int64, minimum: 0 }
+        shipping_cents: { type: integer, format: int64, minimum: 0 }
+        discount_cents: { type: integer, format: int64, minimum: 0 }
+        total_cents: { type: integer, format: int64, minimum: 0 }
+        expires_at: { type: string, format: date-time }
+    QuoteInput:
+      type: object
+      required: [shipping_address_id]
+      properties:
+        shipping_address_id: { type: string, format: uuid }
+        shipping_service_id: { type: string }
+        coupon_code: { type: string }
+    ConfirmResponse:
+      type: object
+      required: [order_id, status, subtotal_cents, shipping_cents, discount_cents, total_cents, charge_id, payment_method, created_at]
+      properties:
+        order_id: { type: string, format: uuid }
+        status: { type: string }
+        subtotal_cents: { type: integer, format: int64, minimum: 0 }
+        shipping_cents: { type: integer, format: int64, minimum: 0 }
+        discount_cents: { type: integer, format: int64, minimum: 0 }
+        total_cents: { type: integer, format: int64, minimum: 0 }
+        charge_id: { type: string, format: uuid }
+        payment_method: { type: string }
+        created_at: { type: string, format: date-time }
+    OrderItem:
+      type: object
+      required: [id, order_id, product_id, variant_id, quantity, unit_price, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        product_id: { type: string, format: uuid }
+        variant_id: { type: string, format: uuid }
+        quantity: { type: integer }
+        unit_price: { type: integer, format: int64 }
+        snapshot: { type: object, additionalProperties: true, nullable: true }
+        created_at: { type: string, format: date-time }
+    Order:
+      type: object
+      required: [id, user_id, status, subtotal, shipping, discount, total, items, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        status: { type: string, enum: [pending_payment, paid, paid_awaiting_stock, confirmed, shipped, delivered, cancelled, expired] }
+        subtotal: { type: integer, format: int64 }
+        shipping: { type: integer, format: int64 }
+        discount: { type: integer, format: int64 }
+        total: { type: integer, format: int64 }
+        coupon_code: { type: string, nullable: true }
+        address_snapshot: { type: object, additionalProperties: true, nullable: true }
+        shipping_snapshot: { type: object, additionalProperties: true, nullable: true }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItem' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    OrderListItem:
+      type: object
+      required: [id, status, subtotal, shipping, discount, total, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [pending_payment, paid, paid_awaiting_stock, confirmed, shipped, delivered, cancelled, expired] }
+        subtotal: { type: integer, format: int64 }
+        shipping: { type: integer, format: int64 }
+        discount: { type: integer, format: int64 }
+        total: { type: integer, format: int64 }
+        coupon_code: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Coupon:
+      type: object
+      required: [code, type, value, used_count, active]
+      properties:
+        code: { type: string }
+        type: { type: string, enum: [percent, fixed] }
+        value: { type: integer, format: int64 }
+        expires_at: { type: string, format: date-time, nullable: true }
+        usage_limit: { type: integer, nullable: true }
+        used_count: { type: integer }
+        min_order_cents: { type: integer, format: int64, nullable: true }
+        active: { type: boolean }
+    CouponInput:
+      type: object
+      required: [code, type, value]
+      properties:
+        code: { type: string }
+        type: { type: string, enum: [percent, fixed] }
+        value: { type: integer, format: int64, minimum: 1 }
+        expires_at: { type: string, format: date-time }
+        usage_limit: { type: integer, minimum: 1 }
+        min_order_cents: { type: integer, format: int64, minimum: 0 }
+    StockInput:
+      type: object
+      required: [available]
+      properties:
+        available: { type: integer, minimum: 0, maximum: 2147483647 }
+        version: { type: integer, minimum: 0 }
+    StockResponse:
+      type: object
+      required: [variantId, available, reserved, version]
+      properties:
+        variantId: { type: string, format: uuid }
+        available: { type: integer }
+        reserved: { type: integer }
+        version: { type: integer }
