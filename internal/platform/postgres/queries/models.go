@@ -90,6 +90,47 @@ type CatalogVariant struct {
 	UpdatedAt  time.Time
 }
 
+type Charge struct {
+	ID               uuid.UUID
+	OrderID          uuid.UUID
+	Provider         string
+	ProviderChargeID string
+	Method           string
+	Status           string
+	AmountCents      int64
+	RawPayload       []byte
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type CheckoutQuote struct {
+	ID               uuid.UUID
+	UserID           uuid.UUID
+	CartFingerprint  string
+	LinesSnapshot    []byte
+	ShippingSnapshot []byte
+	CouponCode       *string
+	SubtotalCents    int64
+	ShippingCents    int64
+	DiscountCents    int64
+	TotalCents       int64
+	ExpiresAt        time.Time
+	CreatedAt        time.Time
+}
+
+type Coupon struct {
+	ID            uuid.UUID
+	Code          string
+	Type          string
+	Value         int64
+	ExpiresAt     *time.Time
+	UsageLimit    *int32
+	UsedCount     int32
+	MinOrderCents *int64
+	Active        bool
+	CreatedAt     time.Time
+}
+
 type EmailVerifyToken struct {
 	TokenHash  []byte
 	UserID     uuid.UUID
@@ -99,12 +140,64 @@ type EmailVerifyToken struct {
 	CreatedAt  time.Time
 }
 
+type IdempotencyKey struct {
+	Key         string
+	UserID      uuid.UUID
+	RequestHash string
+	OrderID     *uuid.UUID
+	Response    []byte
+	CreatedAt   time.Time
+}
+
+type InventoryStock struct {
+	VariantID uuid.UUID
+	Available int32
+	Reserved  int32
+	Version   int32
+	UpdatedAt time.Time
+}
+
+type Order struct {
+	ID               uuid.UUID
+	UserID           uuid.UUID
+	Status           string
+	SubtotalCents    int64
+	ShippingCents    int64
+	DiscountCents    int64
+	TotalCents       int64
+	CouponCode       *string
+	AddressSnapshot  []byte
+	ShippingSnapshot []byte
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type OrderItem struct {
+	ID              uuid.UUID
+	OrderID         uuid.UUID
+	VariantID       uuid.UUID
+	Quantity        int32
+	UnitPriceCents  int64
+	ProductSnapshot []byte
+	CreatedAt       time.Time
+}
+
 type PasswordResetToken struct {
 	TokenHash  []byte
 	UserID     uuid.UUID
 	ExpiresAt  time.Time
 	ConsumedAt *time.Time
 	CreatedAt  time.Time
+}
+
+type StockReservation struct {
+	ID        uuid.UUID
+	OrderID   uuid.UUID
+	VariantID uuid.UUID
+	Quantity  int32
+	Status    string
+	ExpiresAt time.Time
+	CreatedAt time.Time
 }
 
 type User struct {
