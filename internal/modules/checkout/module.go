@@ -125,13 +125,15 @@ func New(d Deps) *Module {
 	charger := d.Charger
 
 	// --- services ---
+	couponSvc := application.NewCouponService(couponRepo)
+
 	checkoutSvc := application.NewCheckoutService(application.CheckoutDeps{
 		Carts:       cartReader,
 		Prices:      priceReader,
 		Shipping:    shippingAdapter,
 		Addresses:   addrAdapter,
 		Quotes:      quoteRepo,
-		Coupons:     application.NewCouponService(couponRepo),
+		Coupons:     couponSvc,
 		ConfirmRepo: confirmRepo,
 		Idempotency: idemRepo,
 		Charger:     charger,
@@ -139,8 +141,6 @@ func New(d Deps) *Module {
 		application.WithQuoteTTL(d.Cfg.QuoteTTL),
 		application.WithReservationTTL(d.Cfg.ReservationTTL),
 	)
-
-	couponSvc := application.NewCouponService(couponRepo)
 	reconciler := application.NewReconciler(reconcileRepo)
 
 	return &Module{

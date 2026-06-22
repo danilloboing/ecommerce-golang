@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	orderingdomain "github.com/danilloboing/marketplace-golang/internal/modules/ordering/domain"
 	paymentdomain "github.com/danilloboing/marketplace-golang/internal/modules/payment/domain"
 	"github.com/danilloboing/marketplace-golang/internal/platform/postgres/queries"
 )
@@ -79,7 +80,7 @@ func (r *ReconcileRepo) Apply(ctx context.Context, ev paymentdomain.Event) error
 
 	switch ev.Type {
 	case "failed":
-		if ord.Status != "pending_payment" {
+		if orderingdomain.OrderStatus(ord.Status) != orderingdomain.PendingPayment {
 			return tx.Commit(ctx) // forward-only
 		}
 		if err := releaseHeld(ctx, q, ord.ID); err != nil {
@@ -98,15 +99,15 @@ func (r *ReconcileRepo) Apply(ctx context.Context, ev paymentdomain.Event) error
 		}
 		if _, err := q.TransitionOrderStatus(ctx, queries.TransitionOrderStatusParams{
 			ID:         ord.ID,
-			FromStatus: "pending_payment",
-			ToStatus:   "payment_failed",
+			FromStatus: string(orderingdomain.PendingPayment),
+			ToStatus:   string(orderingdomain.PaymentFailed),
 		}); err != nil {
 			return fmt.Errorf("reconcile: transition to payment_failed: %w", err)
 		}
 		if err := q.RecordTransition(ctx, queries.RecordTransitionParams{
 			OrderID:    ord.ID,
-			FromStatus: strPtr("pending_payment"),
-			ToStatus:   "payment_failed",
+			FromStatus: strPtr(string(orderingdomain.PendingPayment)),
+			ToStatus:   string(orderingdomain.PaymentFailed),
 			Reason:     "charge_failed",
 			Actor:      "webhook",
 		}); err != nil {
@@ -115,8 +116,8 @@ func (r *ReconcileRepo) Apply(ctx context.Context, ev paymentdomain.Event) error
 		return tx.Commit(ctx)
 
 	case "paid":
-		switch ord.Status {
-		case "pending_payment":
+		switch orderingdomain.OrderStatus(ord.Status) {
+		case orderingdomain.PendingPayment:
 			if err := commitHeld(ctx, q, ord.ID); err != nil {
 				return fmt.Errorf("reconcile: commit held: %w", err)
 			}
@@ -128,15 +129,15 @@ func (r *ReconcileRepo) Apply(ctx context.Context, ev paymentdomain.Event) error
 			}
 			if _, err := q.TransitionOrderStatus(ctx, queries.TransitionOrderStatusParams{
 				ID:         ord.ID,
-				FromStatus: "pending_payment",
-				ToStatus:   "paid",
+				FromStatus: string(orderingdomain.PendingPayment),
+				ToStatus:   string(orderingdomain.Paid),
 			}); err != nil {
 				return fmt.Errorf("reconcile: transition to paid: %w", err)
 			}
 			if err := q.RecordTransition(ctx, queries.RecordTransitionParams{
 				OrderID:    ord.ID,
-				FromStatus: strPtr("pending_payment"),
-				ToStatus:   "paid",
+				FromStatus: strPtr(string(orderingdomain.PendingPayment)),
+				ToStatus:   string(orderingdomain.Paid),
 				Reason:     "charge_paid",
 				Actor:      "webhook",
 			}); err != nil {
@@ -144,7 +145,7 @@ func (r *ReconcileRepo) Apply(ctx context.Context, ev paymentdomain.Event) error
 			}
 			return tx.Commit(ctx)
 
-		case "expired":
+		case orderingdomain.Expired:
 			// C2: payment landed after expiry. Attempt to re-reserve + immediately
 			// commit all order items in a savepoint. If stock is unavailable the
 			// savepoint is rolled back and the order becomes paid_awaiting_stock.
@@ -159,23 +160,23 @@ func (r *ReconcileRepo) Apply(ctx context.Context, ev paymentdomain.Event) error
 			}); err != nil {
 				return fmt.Errorf("reconcile: set charge paid (expiry): %w", err)
 			}
-			toStatus := "paid"
+			toStatus := orderingdomain.Paid
 			reason := "charge_paid_after_expiry"
 			if !allOk {
-				toStatus = "paid_awaiting_stock"
+				toStatus = orderingdomain.PaidAwaitingStock
 				reason = "paid_no_stock"
 			}
 			if _, err := q.TransitionOrderStatus(ctx, queries.TransitionOrderStatusParams{
 				ID:         ord.ID,
-				FromStatus: "expired",
-				ToStatus:   toStatus,
+				FromStatus: string(orderingdomain.Expired),
+				ToStatus:   string(toStatus),
 			}); err != nil {
 				return fmt.Errorf("reconcile: transition expired→%s: %w", toStatus, err)
 			}
 			if err := q.RecordTransition(ctx, queries.RecordTransitionParams{
 				OrderID:    ord.ID,
-				FromStatus: strPtr("expired"),
-				ToStatus:   toStatus,
+				FromStatus: strPtr(string(orderingdomain.Expired)),
+				ToStatus:   string(toStatus),
 				Reason:     reason,
 				Actor:      "webhook",
 			}); err != nil {

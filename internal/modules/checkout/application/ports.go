@@ -53,10 +53,6 @@ type QuoteInput struct {
 	CouponCode string // optional
 }
 
-// QuoteLine is one locked line inside a QuoteResult.
-// Deprecated: prefer domain.QuoteLine. Kept for backward compatibility.
-type QuoteLine = domain.QuoteLine
-
 // QuoteResult is the computed and persisted quote returned to callers.
 type QuoteResult struct {
 	QuoteID   uuid.UUID
@@ -114,7 +110,6 @@ type ConfirmPlan struct {
 
 // IdemHit is the result of an idempotency key lookup.
 type IdemHit struct {
-	Found        bool
 	Replay       bool          // true = same hash, return stored result
 	Conflict     bool          // true = different hash, return ErrIdempotencyConflict
 	StoredResult *ConfirmResult // non-nil if Replay=true

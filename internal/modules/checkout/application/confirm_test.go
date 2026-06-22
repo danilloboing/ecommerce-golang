@@ -158,7 +158,7 @@ func TestCheckoutService_Confirm_IdempotencyReplay(t *testing.T) {
 	storedResult := &application.ConfirmResult{Order: storedOrder, Charge: storedCharge}
 
 	idem := &fakeIdempotency{
-		hit: application.IdemHit{Found: true, Replay: true, StoredResult: storedResult},
+		hit: application.IdemHit{Replay: true, StoredResult: storedResult},
 	}
 	confirmRepo := &fakeConfirmRepo{}
 
@@ -199,7 +199,7 @@ func TestCheckoutService_Confirm_IdempotencyConflict(t *testing.T) {
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 
 	idem := &fakeIdempotency{
-		hit: application.IdemHit{Found: true, Conflict: true},
+		hit: application.IdemHit{Conflict: true},
 	}
 	confirmRepo := &fakeConfirmRepo{}
 

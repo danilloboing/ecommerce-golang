@@ -21,7 +21,6 @@ import (
 	"github.com/danilloboing/marketplace-golang/internal/modules/checkout/application"
 	checkoutdomain "github.com/danilloboing/marketplace-golang/internal/modules/checkout/domain"
 	"github.com/danilloboing/marketplace-golang/internal/modules/checkout/transport"
-	invdomain "github.com/danilloboing/marketplace-golang/internal/modules/inventory/domain"
 	addrdomain "github.com/danilloboing/marketplace-golang/internal/modules/address/domain"
 	orderingdomain "github.com/danilloboing/marketplace-golang/internal/modules/ordering/domain"
 )
@@ -171,7 +170,7 @@ func TestQuote_AddressNotFound_404(t *testing.T) {
 }
 
 func TestQuote_InsufficientStock_422(t *testing.T) {
-	svc := &fakeCheckoutUseCase{quoteErr: invdomain.ErrInsufficientStock}
+	svc := &fakeCheckoutUseCase{quoteErr: checkoutdomain.ErrInsufficientStock}
 	userID := uuid.New()
 	sess := sessionauth.Session{ID: "sid", UserID: userID}
 	r := buildRouter(svc, &sess)
