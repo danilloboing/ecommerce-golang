@@ -120,6 +120,8 @@ func seedQuote(t *testing.T, ctx context.Context, pool *pgxpool.Pool, userID, va
 
 // makePlan assembles a ConfirmPlan from a persisted quote, mirroring what the
 // service builds after a successful idempotency pre-check and charge mint.
+// Provider and ProviderChargeID match what MockProvider.CreateCharge returns so
+// reconciler lookups by provider_charge_id find the persisted row.
 func makePlan(quote domain.Quote, userID uuid.UUID, idemKey, requestHash string) application.ConfirmPlan {
 	orderID := uuid.New()
 	return application.ConfirmPlan{
@@ -127,11 +129,13 @@ func makePlan(quote domain.Quote, userID uuid.UUID, idemKey, requestHash string)
 		OrderID: orderID,
 		Quote:   quote,
 		Charge: application.ChargeView{
-			ChargeID: uuid.New(),
-			OrderID:  orderID,
-			Amount:   quote.Total,
-			Method:   "pix",
-			Status:   "pending",
+			ChargeID:         uuid.New(),
+			OrderID:          orderID,
+			Amount:           quote.Total,
+			Method:           "pix",
+			Status:           "pending",
+			Provider:         "mock",
+			ProviderChargeID: "mock_" + orderID.String(),
 		},
 		IdempotencyKey:       idemKey,
 		RequestHash:          requestHash,
@@ -192,15 +196,16 @@ func TestConfirmTx_HappyPath(t *testing.T) {
 		`SELECT status FROM carts WHERE user_id = $1`, userID).Scan(&cartStatus))
 	assert.Equal(t, "converted", cartStatus)
 
-	// charge row exists, status pending, mock provider.
-	var chargeStatus, provider string
+	// charge row exists, status pending, mock provider, deterministic provider_charge_id.
+	var chargeStatus, provider, providerChargeID string
 	var chargeAmount int64
 	require.NoError(t, pool.QueryRow(ctx,
-		`SELECT status, provider, amount_cents FROM charges WHERE order_id = $1`,
-		plan.OrderID).Scan(&chargeStatus, &provider, &chargeAmount))
+		`SELECT status, provider, amount_cents, provider_charge_id FROM charges WHERE order_id = $1`,
+		plan.OrderID).Scan(&chargeStatus, &provider, &chargeAmount, &providerChargeID))
 	assert.Equal(t, "pending", chargeStatus)
 	assert.Equal(t, "mock", provider)
 	assert.Equal(t, int64(20800), chargeAmount)
+	assert.Equal(t, "mock_"+plan.OrderID.String(), providerChargeID, "provider_charge_id must match reconciler lookup key")
 
 	// idempotency row exists and decodes to the full ConfirmResult.
 	var response []byte

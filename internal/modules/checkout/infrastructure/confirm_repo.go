@@ -123,12 +123,14 @@ func (r *ConfirmRepo) ConfirmTx(ctx context.Context, plan application.ConfirmPla
 		return orderingDomain.Order{}, fmt.Errorf("checkout repo: convert cart: %w", err)
 	}
 
-	// Persist the (mock, in-process) charge. provider_charge_id is the
-	// service-minted charge id, so an idempotent retry maps to the same row.
+	// Persist the charge using Provider and ProviderChargeID from the ChargeView.
+	// These are set by the Charger port (ProviderCharger wraps the real payment
+	// provider; MockCharger uses "mock"/"mock_<orderID>") so the reconciler's
+	// GetChargeByProviderID lookup always matches.
 	if _, err := q.CreateCharge(ctx, queries.CreateChargeParams{
 		OrderID:          plan.OrderID,
-		Provider:         mockChargeProvider,
-		ProviderChargeID: plan.Charge.ChargeID.String(),
+		Provider:         plan.Charge.Provider,
+		ProviderChargeID: plan.Charge.ProviderChargeID,
 		Method:           plan.Charge.Method,
 		AmountCents:      plan.Charge.Amount,
 		RawPayload:       nil,

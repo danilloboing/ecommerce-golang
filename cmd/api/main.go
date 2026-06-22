@@ -275,7 +275,7 @@ func run() error {
 		AdminToken:    cfg.Admin.APIToken,
 		Address:       addressinfra.New(pool),
 		Shipping:      shippingModule.Service(),
-		Charger:       checkoutinfra.NewMockCharger(),
+		Charger:       checkoutinfra.NewProviderCharger(paymentProvider),
 		Cfg:           cfg.Checkout,
 	})
 

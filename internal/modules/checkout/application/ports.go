@@ -122,12 +122,14 @@ type IdemHit struct {
 
 // ChargeView is a checkout-local projection of a payment charge.
 type ChargeView struct {
-	ChargeID  uuid.UUID
-	OrderID   uuid.UUID
-	Amount    int64
-	Method    string
-	Status    string
-	CreatedAt time.Time
+	ChargeID         uuid.UUID
+	OrderID          uuid.UUID
+	Amount           int64
+	Method           string
+	Status           string
+	Provider         string
+	ProviderChargeID string
+	CreatedAt        time.Time
 }
 
 // ---------------------------------------------------------------------------

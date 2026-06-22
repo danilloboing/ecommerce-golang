@@ -14,12 +14,9 @@ import (
 
 	"github.com/danilloboing/marketplace-golang/internal/modules/checkout/application"
 	orderingDomain "github.com/danilloboing/marketplace-golang/internal/modules/ordering/domain"
+	paymentapp "github.com/danilloboing/marketplace-golang/internal/modules/payment/application"
 	"github.com/danilloboing/marketplace-golang/internal/platform/postgres/queries"
 )
-
-// mockChargeProvider is the only payment provider wired in Phase 3a. Real
-// providers arrive in Phase 5; until then charges are minted in-process.
-const mockChargeProvider = "mock"
 
 // ---------------------------------------------------------------------------
 // CartReader adapter
@@ -122,11 +119,10 @@ func (a *ShippingQuoterAdapter) Quote(ctx context.Context, postalCode string, su
 // Charger adapter (Phase 3a mock)
 // ---------------------------------------------------------------------------
 
-// MockCharger is the Phase 3a payment adapter. It mints a pending charge in
-// process without contacting a provider; the persisted charge row is written
-// later, atomically, inside ConfirmTx. ChargeID is generated here so it stays
-// stable across idempotent replays (the service calls CreateCharge once before
-// ConfirmTx, then reuses the same ChargeView).
+// MockCharger is a test-only Charger that mints a deterministic pending charge
+// in process. Provider and ProviderChargeID are set to match what MockProvider
+// produces so integration tests that don't wire a real PaymentProvider still
+// produce a consistent provider_charge_id.
 type MockCharger struct{}
 
 var _ application.Charger = (*MockCharger)(nil)
@@ -135,13 +131,53 @@ var _ application.Charger = (*MockCharger)(nil)
 func NewMockCharger() *MockCharger { return &MockCharger{} }
 
 // CreateCharge returns a pending mock charge for the given order and amount.
+// ProviderChargeID is "mock_<orderID>" — identical to what MockProvider.CreateCharge
+// returns — so tests that query by provider_charge_id find the row.
 func (MockCharger) CreateCharge(_ context.Context, orderID uuid.UUID, amount int64, method string) (application.ChargeView, error) {
 	return application.ChargeView{
-		ChargeID: uuid.New(),
-		OrderID:  orderID,
-		Amount:   amount,
-		Method:   method,
-		Status:   "pending",
+		ChargeID:         uuid.New(),
+		OrderID:          orderID,
+		Amount:           amount,
+		Method:           method,
+		Status:           "pending",
+		Provider:         "mock",
+		ProviderChargeID: "mock_" + orderID.String(),
+	}, nil
+}
+
+// ProviderCharger adapts a payment PaymentProvider to checkout's Charger port.
+// It delegates CreateCharge to the real provider so the ProviderChargeID returned
+// is the same deterministic value the payment webhook reconciler will look up.
+type ProviderCharger struct {
+	provider paymentapp.PaymentProvider
+}
+
+var _ application.Charger = ProviderCharger{}
+
+// NewProviderCharger builds a ProviderCharger wrapping the given PaymentProvider.
+func NewProviderCharger(p paymentapp.PaymentProvider) ProviderCharger {
+	return ProviderCharger{provider: p}
+}
+
+// CreateCharge calls the payment provider and maps its domain.Charge back to
+// checkout's ChargeView, preserving the Provider and ProviderChargeID.
+func (c ProviderCharger) CreateCharge(ctx context.Context, orderID uuid.UUID, amount int64, method string) (application.ChargeView, error) {
+	ch, err := c.provider.CreateCharge(ctx, paymentapp.ChargeRequest{
+		OrderID:     orderID,
+		AmountCents: amount,
+		Method:      method,
+	})
+	if err != nil {
+		return application.ChargeView{}, err
+	}
+	return application.ChargeView{
+		ChargeID:         ch.ID,
+		OrderID:          orderID,
+		Amount:           amount,
+		Method:           method,
+		Status:           string(ch.Status),
+		Provider:         ch.Provider,
+		ProviderChargeID: ch.ProviderChargeID,
 	}, nil
 }
 
