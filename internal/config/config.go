@@ -23,6 +23,7 @@ type Config struct {
 	RateLimit     RateLimit
 	Cookies       Cookies
 	ViaCEP        ViaCEP
+	Cart          Cart
 }
 
 // App holds general application settings.
@@ -115,6 +116,12 @@ type ViaCEP struct {
 	BaseURL  string        `env:"VIACEP_BASE_URL" envDefault:"https://viacep.com.br/ws"`
 	Timeout  time.Duration `env:"VIACEP_TIMEOUT" envDefault:"3s"`
 	CacheTTL time.Duration `env:"VIACEP_CACHE_TTL" envDefault:"1h"`
+}
+
+// Cart configures cart background maintenance.
+type Cart struct {
+	AbandonedAfter  time.Duration `env:"CART_ABANDONED_AFTER" envDefault:"168h"` // 7d
+	CleanupInterval time.Duration `env:"CART_CLEANUP_INTERVAL" envDefault:"6h"`
 }
 
 // Load parses configuration from environment variables.
